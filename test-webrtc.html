@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>WebRTC 可行性测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .warning { background: #fff3cd; color: #856404; }
+    </style>
+</head>
+<body>
+    <h1>WebRTC 可行性测试</h1>
+    <div id="result"></div>
+    
+    <script>
+        const resultDiv = document.getElementById('result');
+        
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.textContent = message;
+            resultDiv.appendChild(div);
+        }
+        
+        // 检查当前协议
+        log(`当前协议: ${window.location.protocol}`);
+        log(`当前来源: ${window.location.origin}`);
+        
+        // 检查 WebRTC 支持
+        if (typeof RTCPeerConnection === 'undefined') {
+            log('RTCPeerConnection 未定义 - WebRTC 不受支持', 'error');
+        } else {
+            log('RTCPeerConnection 已定义 - WebRTC 受支持', 'success');
+        }
+        
+        // 尝试创建 PeerConnection
+        try {
+            const pc = new RTCPeerConnection({
+                iceServers: [] // 不使用 STUN/TURN
+            });
+            log('成功创建 RTCPeerConnection 实例', 'success');
+            
+            // 检查 DataChannel 支持
+            if (typeof pc.createDataChannel !== 'function') {
+                log('createDataChannel 方法不存在', 'error');
+            } else {
+                log('createDataChannel 方法存在', 'success');
+            }
+            
+            // 尝试创建 DataChannel
+            try {
+                const channel = pc.createDataChannel('test');
+                log('成功创建 DataChannel', 'success');
+                channel.close();
+            } catch (e) {
+                log(`创建 DataChannel 失败: ${e.message}`, 'error');
+            }
+            
+            // 检查剪贴板 API
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                log('剪贴板 API 可用', 'success');
+            } else {
+                log('剪贴板 API 不可用（可能需要 HTTPS）', 'warning');
+            }
+            
+            // 关闭连接
+            pc.close();
+            
+        } catch (e) {
+            log(`创建 RTCPeerConnection 失败: ${e.message}`, 'error');
+        }
+        
+        // 检查协议限制
+        if (window.location.protocol === 'file:') {
+            log('警告: 在 file:// 协议下，WebRTC 可能受到限制', 'warning');
+            log('某些浏览器（如 Chrome）可能禁止 file:// 页面使用 WebRTC', 'warning');
+        }
+    </script>
+</body>
+</html>

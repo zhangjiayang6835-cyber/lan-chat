@@ -1,0 +1,2680 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>局域网匿名聊天室</title>
+    <style>
+        /* 基础重置 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        /* 暗黑主题变量 */
+        :root {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2d2d2d;
+            --bg-tertiary: #3a3a3a;
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0b0;
+            --accent: #4a6fa5;
+            --accent-hover: #5a80b5;
+            --border: #404040;
+            --success: #4caf50;
+            --error: #f44336;
+            --bubble-self: #4a6fa5;
+            --bubble-other: #3a3a3a;
+            --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* 容器样式 */
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            width: 100%;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* 视图切换控制 */
+        .view {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+        }
+        
+        .view.active {
+            display: flex;
+        }
+        
+        /* 连接视图 */
+        #connect-view {
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 40px 20px;
+        }
+        
+        .title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, var(--accent), #7b9cd6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .subtitle {
+            color: var(--text-secondary);
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+        
+        /* 按钮组 */
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 100%;
+            max-width: 320px;
+        }
+        
+        .btn {
+            padding: 14px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .btn-primary {
+            background-color: var(--accent);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--accent-hover);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+        
+        .btn-secondary {
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+        
+        .btn-secondary:hover {
+            background-color: var(--bg-tertiary);
+            transform: translateY(-2px);
+        }
+        
+        .btn-danger {
+            background-color: var(--error);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background-color: #d32f2f;
+        }
+        
+        /* SDP文本区域 */
+        .sdp-container {
+            margin-top: 30px;
+            width: 100%;
+            max-width: 600px;
+            display: none;
+        }
+        
+        .sdp-container.show {
+            display: block;
+        }
+        
+        .sdp-label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .sdp-textarea {
+            width: 100%;
+            height: 150px;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+            padding: 12px;
+            resize: vertical;
+        }
+        
+        .sdp-textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        
+        .copy-btn {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background-color: var(--bg-tertiary);
+            border: none;
+            border-radius: 4px;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        
+        .copy-btn:hover {
+            background-color: var(--accent);
+        }
+
+        /* ==================== 数字房间号模式 ==================== */
+        .room-panel {
+            margin-top: 36px;
+            width: 100%;
+            max-width: 320px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .room-label {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 14px;
+        }
+
+        .room-input {
+            width: 100%;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 2.6rem;
+            font-weight: 700;
+            letter-spacing: 0.5em;
+            text-align: center;
+            padding: 16px 0 16px 0.5em;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .room-input::placeholder {
+            color: var(--bg-tertiary);
+        }
+
+        .room-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(74, 111, 165, 0.25);
+        }
+
+        .btn-lg {
+            width: 100%;
+            margin-top: 16px;
+            padding: 16px 24px;
+            font-size: 1.15rem;
+            letter-spacing: 0.3em;
+            border-radius: 12px;
+        }
+
+        .room-hint {
+            margin-top: 14px;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        /* 等待连接面板 */
+        .waiting-panel {
+            margin-top: 32px;
+            width: 100%;
+            max-width: 380px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px 24px;
+        }
+
+        .waiting-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .waiting-code {
+            font-size: 3rem;
+            font-weight: 700;
+            letter-spacing: 0.35em;
+            margin-left: 0.35em;
+            color: var(--accent-hover);
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            margin-top: 4px;
+        }
+
+        .waiting-spinner {
+            width: 28px;
+            height: 28px;
+            margin: 18px 0 10px;
+            border: 3px solid var(--bg-tertiary);
+            border-top-color: var(--accent-hover);
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .waiting-status {
+            font-size: 0.95rem;
+            color: var(--text-primary);
+            text-align: center;
+            min-height: 1.4em;
+        }
+
+        .waiting-status.error {
+            color: var(--error);
+        }
+
+        .waiting-share {
+            margin-top: 18px;
+            width: 100%;
+            border-top: 1px solid var(--border);
+            padding-top: 16px;
+        }
+
+        .waiting-share-tip {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .share-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .share-url {
+            flex: 1;
+            background-color: var(--bg-tertiary);
+            border-radius: 6px;
+            padding: 9px 10px;
+            font-size: 0.82rem;
+            color: var(--text-primary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        }
+
+        .share-row .copy-btn {
+            flex-shrink: 0;
+        }
+
+        /* 高级手动模式折叠面板 */
+        .manual-panel {
+            margin-top: 40px;
+            width: 100%;
+            max-width: 600px;
+        }
+
+        .manual-panel summary {
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 0.88rem;
+            padding: 10px 0;
+            user-select: none;
+            list-style: none;
+            text-align: center;
+        }
+
+        .manual-panel summary::before {
+            content: '▸ ';
+            display: inline-block;
+            transition: transform 0.2s ease;
+        }
+
+        .manual-panel[open] summary::before {
+            transform: rotate(90deg);
+        }
+
+        .manual-panel summary:hover {
+            color: var(--text-primary);
+        }
+
+        .manual-body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 12px;
+        }
+        
+        /* 聊天视图 */
+        #chat-view {
+            height: 100vh;
+            max-height: 100vh;
+            padding: 0;
+        }
+        
+        .chat-header {
+            padding: 15px 20px;
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        .chat-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+        
+        .chat-header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--error);
+        }
+        
+        .status-dot.connected {
+            background-color: var(--success);
+        }
+        
+        /* 消息区域 */
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .message {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 16px;
+            position: relative;
+            word-wrap: break-word;
+        }
+        
+        .message.sent {
+            align-self: flex-end;
+            background-color: var(--bubble-self);
+            border-bottom-right-radius: 4px;
+        }
+        
+        .message.received {
+            align-self: flex-start;
+            background-color: var(--bubble-other);
+            border-bottom-left-radius: 4px;
+        }
+        
+        .message-text {
+            margin: 0;
+            font-size: 0.95rem;
+            line-height: 1.4;
+        }
+        
+        .message-time {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.7);
+            margin-top: 4px;
+            text-align: right;
+        }
+        
+        .message.received .message-time {
+            text-align: left;
+        }
+        
+        /* 系统消息 */
+        .system-message {
+            align-self: center;
+            background-color: transparent;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            padding: 8px 16px;
+            border-radius: 20px;
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        
+        /* 输入区域 */
+        .input-container {
+            padding: 15px 20px;
+            background-color: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+        
+        .input-container.disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        
+        .input-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .input-row {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+        
+        #message-input {
+            flex: 1;
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 1rem;
+            resize: none;
+            min-height: 44px;
+            max-height: 120px;
+            line-height: 1.4;
+        }
+        
+        #message-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        
+        #message-input::placeholder {
+            color: var(--text-secondary);
+        }
+        
+        .input-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            justify-content: flex-end;
+        }
+        
+        .input-actions .btn {
+            padding: 8px 16px;
+            font-size: 0.9rem;
+        }
+        
+        /* 空状态提示 */
+        .empty-state {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: var(--text-secondary);
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        
+        /* ========== 阶段3: 断线提示相关样式 ========== */
+        .back-to-connect-btn {
+            padding: 6px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            gap: 4px;
+            transition: background-color 0.2s;
+        }
+        .back-to-connect-btn:hover {
+            background-color: var(--accent);
+        }
+        .back-to-connect-btn.show {
+            display: inline-flex;
+        }
+        
+        /* ========== 阶段4: 附件/阅后即焚/文件传输样式 ========== */
+        
+        /* 附件按钮 */
+        .attach-btn {
+            width: 44px;
+            height: 44px;
+            border: 1px solid var(--border);
+            border-radius: 50%;
+            background-color: var(--bg-primary);
+            color: var(--text-secondary);
+            font-size: 1.3rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+        .attach-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background-color: var(--bg-tertiary);
+        }
+        
+        /* 阅后即焚切换按钮 */
+        .burn-toggle {
+            padding: 4px 10px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background-color: var(--bg-tertiary);
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .burn-toggle:hover {
+            border-color: var(--accent);
+        }
+        .burn-toggle.active {
+            background-color: #e53935;
+            border-color: #e53935;
+            color: #fff;
+        }
+        
+        /* 阅后即焚标签 */
+        .burn-label {
+            display: inline-block;
+            font-size: 0.75rem;
+            color: #ff7043;
+            margin-bottom: 4px;
+        }
+        
+        /* 阅后即焚消息动画 */
+        .burn-message {
+            animation: burnFadeIn 0.3s ease forwards;
+        }
+        @keyframes burnFadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .burn-message.burn-out {
+            animation: burnFadeOut 1s ease forwards;
+        }
+        @keyframes burnFadeOut {
+            0% { opacity: 1; transform: translateY(0); }
+            80% { opacity: 0; transform: translateY(-10px); }
+            100% { opacity: 0; transform: translateY(-10px); height: 0; padding: 0; margin: 0; overflow: hidden; }
+        }
+        
+        /* 文件消息 */
+        .file-message-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 200px;
+        }
+        .file-icon {
+            font-size: 2rem;
+            flex-shrink: 0;
+        }
+        .file-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .file-name {
+            font-size: 0.9rem;
+            font-weight: 600;
+            word-break: break-all;
+            color: #fff;
+        }
+        .file-size {
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.6);
+            margin-top: 2px;
+        }
+        .file-download-btn {
+            margin-top: 6px;
+            padding: 4px 12px;
+            border: none;
+            border-radius: 4px;
+            background-color: rgba(255,255,255,0.15);
+            color: #fff;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .file-download-btn:hover {
+            background-color: rgba(255,255,255,0.25);
+        }
+        
+        /* 文件传输进度条 */
+        .file-progress-container {
+            margin-top: 6px;
+        }
+        .file-progress-bar {
+            width: 100%;
+            height: 4px;
+            background-color: rgba(255,255,255,0.15);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .file-progress-fill {
+            height: 100%;
+            background-color: var(--success);
+            border-radius: 2px;
+            transition: width 0.2s ease;
+        }
+        .file-progress-text {
+            font-size: 0.7rem;
+            color: rgba(255,255,255,0.6);
+            margin-top: 2px;
+            text-align: right;
+        }
+        
+        /* 图片预览 */
+        .message-image {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 8px;
+            margin-top: 6px;
+            cursor: pointer;
+        }
+        
+        /* 隐藏的文件输入框 */
+        #file-input {
+            display: none;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .title {
+                font-size: 2rem;
+            }
+            
+            .button-group {
+                max-width: 100%;
+            }
+            
+            .message {
+                max-width: 85%;
+            }
+            
+            .input-container {
+                padding: 12px 15px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .title {
+                font-size: 1.7rem;
+            }
+            
+            .chat-header {
+                padding: 12px 15px;
+            }
+            
+            .messages-container {
+                padding: 15px;
+            }
+        }
+        
+        /* 滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-tertiary);
+            border-radius: 3px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent);
+        }
+        
+        /* 动画 */
+        .fade-in {
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 文件协议警告 */
+        .protocol-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: left;
+            font-size: 0.9rem;
+            border: 1px solid #ffc107;
+        }
+
+        .protocol-warning code {
+            background-color: rgba(0, 0, 0, 0.1);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.85rem;
+        }
+
+        /* SDP输入区域 */
+        .sdp-input-container {
+            margin-top: 15px;
+            width: 100%;
+            max-width: 600px;
+            display: none;
+        }
+
+        .sdp-input-container.show {
+            display: block;
+        }
+
+        .sdp-input-textarea {
+            width: 100%;
+            height: 150px;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+            padding: 12px;
+            resize: vertical;
+        }
+
+        .sdp-input-textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .sdp-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .sdp-actions .copy-btn {
+            margin-top: 0;
+        }
+
+        /* SDP步骤提示 */
+        .sdp-steps {
+            margin-top: 20px;
+            text-align: left;
+            max-width: 600px;
+            width: 100%;
+            display: none;
+        }
+
+        .sdp-steps.show {
+            display: block;
+        }
+
+        .sdp-steps h3 {
+            font-size: 1rem;
+            margin-bottom: 10px;
+            color: var(--accent);
+        }
+
+        .sdp-steps ol {
+            padding-left: 20px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.8;
+        }
+
+        .sdp-steps ol li {
+            margin-bottom: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 连接视图 -->
+        <div id="connect-view" class="view active">
+            <!-- 文件协议警告 -->
+            <div id="protocol-warning" class="protocol-warning" style="display:none;">
+                ⚠️ 您正在使用 <code>file://</code> 协议打开页面，数字房间模式不可用。<br>
+                请启动服务器：<code>node server.js</code>，然后访问 <code>http://localhost:1808</code><br>
+                也可以展开下方「高级：手动 SDP 连接」离线使用。
+            </div>
+
+            <h1 class="title">局域网匿名聊天室</h1>
+            <p class="subtitle">同一 WiFi 下输入相同数字即可连接 · P2P 直连 · 无需注册</p>
+
+            <!-- 主界面：数字房间号 -->
+            <div id="room-panel" class="room-panel">
+                <label class="room-label" for="room-code-input">输入 4 位数字房间号</label>
+                <input id="room-code-input" class="room-input" type="text" inputmode="numeric"
+                       pattern="[0-9]*" maxlength="4" placeholder="0000" autocomplete="off">
+                <button id="enter-room-btn" class="btn btn-primary btn-lg">进 入</button>
+                <p class="room-hint">与朋友约定相同数字：先到者自动创建，后到者自动加入</p>
+            </div>
+
+            <!-- 等待连接面板 -->
+            <div id="waiting-panel" class="waiting-panel" hidden>
+                <div class="waiting-label">房间号</div>
+                <div id="waiting-code" class="waiting-code">0000</div>
+                <div class="waiting-spinner"></div>
+                <p id="waiting-status" class="waiting-status">正在准备…</p>
+                <div class="waiting-share">
+                    <p class="waiting-share-tip">让朋友在同一 WiFi 下打开此地址：</p>
+                    <div class="share-row">
+                        <code id="share-url" class="share-url">http://…</code>
+                        <button id="copy-url-btn" class="copy-btn" style="margin-top:0;">复制</button>
+                    </div>
+                </div>
+                <button id="cancel-wait-btn" class="btn btn-secondary" style="margin-top:20px; max-width:320px; width:100%;">取消</button>
+            </div>
+
+            <!-- 高级：手动 SDP 连接（无需服务器） -->
+            <details id="manual-panel" class="manual-panel">
+                <summary>高级：手动 SDP 连接（无需服务器）</summary>
+                <div class="manual-body">
+                    <div class="button-group" id="main-buttons">
+                        <button id="create-btn" class="btn btn-primary">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12h14"/>
+                            </svg>
+                            创建连接
+                        </button>
+                        <button id="join-btn" class="btn btn-secondary">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                            </svg>
+                            加入连接
+                        </button>
+                    </div>
+
+                    <!-- 创建连接：显示SDP文本区域 -->
+                    <div id="sdp-container" class="sdp-container">
+                        <label class="sdp-label" for="sdp-text">复制以下内容并发送给对方：</label>
+                        <textarea id="sdp-text" class="sdp-textarea" readonly placeholder="SDP内容将显示在这里..."></textarea>
+                        <button id="copy-sdp-btn" class="copy-btn">复制到剪贴板</button>
+                    </div>
+
+                    <!-- 加入连接：粘贴SDP输入区域 -->
+                    <div id="sdp-input-container" class="sdp-input-container">
+                        <label class="sdp-label" for="sdp-input-text">粘贴对方发送的 Offer SDP：</label>
+                        <textarea id="sdp-input-text" class="sdp-input-textarea" placeholder="在此粘贴对方的 Offer SDP 内容..."></textarea>
+                        <div class="sdp-actions">
+                            <button id="paste-sdp-btn" class="copy-btn">从剪贴板粘贴</button>
+                            <button id="submit-sdp-btn" class="copy-btn" style="background-color: var(--accent);">提交并连接</button>
+                        </div>
+                    </div>
+
+                    <!-- 步骤提示 -->
+                    <div id="sdp-steps" class="sdp-steps">
+                        <h3 id="sdp-steps-title"></h3>
+                        <ol id="sdp-steps-list"></ol>
+                    </div>
+
+                    <!-- 返回按钮 -->
+                    <button id="back-btn" class="btn btn-secondary" style="margin-top: 20px; display: none; max-width: 320px; width: 100%;">
+                        返回
+                    </button>
+                </div>
+            </details>
+        </div>
+        
+        <!-- 聊天视图 -->
+        <div id="chat-view" class="view" hidden>
+            <div class="chat-header">
+                <div class="chat-header-left">
+                    <h2 class="chat-title">匿名聊天</h2>
+                    <!-- 阶段4: 阅后即焚切换按钮 -->
+                    <button id="burn-toggle" class="burn-toggle" title="阅后即焚模式">🔒 阅后即焚</button>
+                </div>
+                <div class="connection-status">
+                    <div id="status-dot" class="status-dot"></div>
+                    <span id="status-text">未连接</span>
+                    <!-- 阶段3: 断线后显示返回按钮 -->
+                    <button id="back-to-connect" class="back-to-connect-btn">↩ 返回</button>
+                </div>
+            </div>
+            
+            <div id="messages" class="messages-container">
+                <div class="empty-state">
+                    <div class="empty-state-icon">💬</div>
+                    <p>开始聊天吧！消息将通过P2P直连发送。</p>
+                </div>
+            </div>
+            
+            <div id="input-container" class="input-container">
+                <div class="input-wrapper">
+                    <div class="input-row">
+                        <!-- 阶段4: 附件按钮 -->
+                        <button id="attach-btn" class="attach-btn" title="发送文件">📎</button>
+                        <textarea id="message-input" placeholder="输入消息... (Enter发送, Shift+Enter换行)" rows="1"></textarea>
+                    </div>
+                    <div class="input-actions">
+                        <button id="clear-chat-btn" class="btn btn-secondary">清空聊天</button>
+                        <button id="send-btn" class="btn btn-primary">发送</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 隐藏的文件选择框 -->
+            <input type="file" id="file-input" multiple>
+        </div>
+    </div>
+
+    <script>
+        // ==================== 状态管理 ====================
+        const state = {
+            currentView: 'connect-view',
+            isConnected: false,
+            messages: [],
+            mode: null,        // 'create' 或 'join'
+            peerConnection: null,
+            dataChannel: null,
+            pendingCandidates: [], // ICE candidate 缓存
+            burnMode: false,       // 阶段4: 阅后即焚模式开关
+            fileTransfers: {},     // 阶段4: 文件传输状态跟踪 { fileName: { received: 0, total: 0, chunks: [] } }
+
+            // 数字房间号模式
+            roomCode: null,        // 当前房间号
+            roomRole: null,        // 'host'（创建方）| 'guest'（加入方）
+            pollTimer: null,       // 房间轮询定时器
+            hostIp: null,          // 服务器视角的本机局域网 IP（用于 mDNS 修复）
+            connectTimeout: null,  // 连接超时保护定时器
+        };
+
+        // 信令服务器地址：与页面同源
+        const SIGNAL_BASE = location.protocol === 'file:' ? null : '';
+
+        // ==================== DOM 元素引用 ====================
+        const elements = {
+            // 视图
+            connectView: document.getElementById('connect-view'),
+            chatView: document.getElementById('chat-view'),
+            
+            // 连接视图
+            createBtn: document.getElementById('create-btn'),
+            joinBtn: document.getElementById('join-btn'),
+            mainButtons: document.getElementById('main-buttons'),
+            sdpContainer: document.getElementById('sdp-container'),
+            sdpText: document.getElementById('sdp-text'),
+            copySdpBtn: document.getElementById('copy-sdp-btn'),
+            sdpInputContainer: document.getElementById('sdp-input-container'),
+            sdpInputText: document.getElementById('sdp-input-text'),
+            pasteSdpBtn: document.getElementById('paste-sdp-btn'),
+            submitSdpBtn: document.getElementById('submit-sdp-btn'),
+            sdpSteps: document.getElementById('sdp-steps'),
+            sdpStepsTitle: document.getElementById('sdp-steps-title'),
+            sdpStepsList: document.getElementById('sdp-steps-list'),
+            backBtn: document.getElementById('back-btn'),
+            protocolWarning: document.getElementById('protocol-warning'),
+
+            // 数字房间号模式
+            roomPanel: document.getElementById('room-panel'),
+            roomCodeInput: document.getElementById('room-code-input'),
+            enterRoomBtn: document.getElementById('enter-room-btn'),
+            waitingPanel: document.getElementById('waiting-panel'),
+            waitingCode: document.getElementById('waiting-code'),
+            waitingStatus: document.getElementById('waiting-status'),
+            shareUrl: document.getElementById('share-url'),
+            copyUrlBtn: document.getElementById('copy-url-btn'),
+            cancelWaitBtn: document.getElementById('cancel-wait-btn'),
+            manualPanel: document.getElementById('manual-panel'),
+            
+            // 聊天视图
+            statusDot: document.getElementById('status-dot'),
+            statusText: document.getElementById('status-text'),
+            messages: document.getElementById('messages'),
+            messageInput: document.getElementById('message-input'),
+            sendBtn: document.getElementById('send-btn'),
+            clearChatBtn: document.getElementById('clear-chat-btn'),
+            inputContainer: document.getElementById('input-container'),
+            
+            // 阶段3: 返回连接页按钮
+            backToConnect: document.getElementById('back-to-connect'),
+            
+            // 阶段4: 文件传输与阅后即焚
+            burnToggle: document.getElementById('burn-toggle'),
+            attachBtn: document.getElementById('attach-btn'),
+            fileInput: document.getElementById('file-input'),
+        };
+
+        // ==================== WebRTC 配置 ====================
+        // 局域网内直连，不需要 TURN/STUN 服务器
+        const rtcConfig = {
+            iceServers: []
+        };
+
+        // ==================== 阶段4: 文件传输配置 ====================
+        const FILE_CHUNK_SIZE = 16384; // 16KB per chunk，DataChannel 消息大小安全限制
+        const FILE_TYPE_ICONS = {
+            'image': '🖼️',
+            'video': '🎬',
+            'audio': '🎵',
+            'application/pdf': '📄',
+            'application/zip': '📦',
+            'application/x-rar-compressed': '📦',
+            'application/x-7z-compressed': '📦',
+            'text': '📝',
+            'default': '📁'
+        };
+
+        // ==================== 工具函数 ====================
+
+        /**
+         * 检测文件协议并显示警告
+         */
+        function checkProtocol() {
+            if (window.location.protocol === 'file:') {
+                elements.protocolWarning.style.display = 'block';
+                elements.roomPanel.hidden = true;
+                elements.manualPanel.open = true;
+            }
+        }
+
+        /**
+         * 切换视图
+         * @param {string} viewId - 视图ID
+         */
+        function switchView(viewId) {
+            document.querySelectorAll('.view').forEach(view => {
+                view.classList.remove('active');
+                view.hidden = true;
+            });
+            const targetView = document.getElementById(viewId);
+            if (targetView) {
+                targetView.classList.add('active');
+                targetView.hidden = false;
+                state.currentView = viewId;
+            }
+        }
+
+        /**
+         * 更新连接状态显示
+         * @param {string} status - 'connecting' | 'connected' | 'disconnected' | 'failed'
+         */
+        function updateConnectionStatus(status) {
+            switch (status) {
+                case 'connecting':
+                    state.isConnected = false;
+                    elements.statusDot.classList.remove('connected');
+                    elements.statusText.textContent = '连接中...';
+                    elements.statusDot.style.backgroundColor = '#ff9800'; // 橙色
+                    // 阶段3: 连接中隐藏返回按钮、禁用输入
+                    elements.backToConnect.classList.remove('show');
+                    setInputDisabled(true);
+                    break;
+                case 'connected':
+                    state.isConnected = true;
+                    elements.statusDot.classList.add('connected');
+                    elements.statusText.textContent = '已连接';
+                    elements.statusDot.style.backgroundColor = ''; // 使用 CSS 默认的 success 色
+                    // 阶段3: 已连接，隐藏返回按钮、启用输入
+                    elements.backToConnect.classList.remove('show');
+                    setInputDisabled(false);
+                    break;
+                case 'disconnected':
+                case 'failed':
+                default:
+                    state.isConnected = false;
+                    elements.statusDot.classList.remove('connected');
+                    elements.statusText.textContent = status === 'failed' ? '连接失败' : '已断开';
+                    elements.statusDot.style.backgroundColor = 'var(--error)';
+                    // 阶段3: 断线后显示返回按钮、禁用输入
+                    elements.backToConnect.classList.add('show');
+                    setInputDisabled(true);
+                    break;
+            }
+        }
+
+        /**
+         * 阶段3: 控制输入区域的启用/禁用状态
+         * @param {boolean} disabled - 是否禁用
+         */
+        function setInputDisabled(disabled) {
+            if (disabled) {
+                elements.inputContainer.classList.add('disabled');
+                elements.messageInput.disabled = true;
+                elements.sendBtn.disabled = true;
+                elements.attachBtn.disabled = true;
+            } else {
+                elements.inputContainer.classList.remove('disabled');
+                elements.messageInput.disabled = false;
+                elements.sendBtn.disabled = false;
+                elements.attachBtn.disabled = false;
+            }
+        }
+
+        /**
+         * 获取当前时间字符串
+         * @returns {string} 格式化的时间
+         */
+        function getCurrentTime() {
+            const now = new Date();
+            return now.toLocaleTimeString('zh-CN', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        }
+
+        /**
+         * 格式化文件大小
+         * @param {number} bytes - 字节数
+         * @returns {string} 可读的文件大小
+         */
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        /**
+         * 阶段4: 根据 MIME 类型获取文件图标
+         * @param {string} mimeType - MIME 类型
+         * @returns {string} emoji 图标
+         */
+        function getFileIcon(mimeType) {
+            if (!mimeType) return FILE_TYPE_ICONS.default;
+            for (const [key, icon] of Object.entries(FILE_TYPE_ICONS)) {
+                if (key === 'default') continue;
+                if (mimeType.startsWith(key)) return icon;
+            }
+            return FILE_TYPE_ICONS.default;
+        }
+
+        /**
+         * 创建消息DOM元素
+         * @param {string} text - 消息内容
+         * @param {string} type - 消息类型: 'sent', 'received', 'system'
+         * @param {object} options - 可选参数 { burn: boolean, file: object }
+         * @returns {HTMLElement} 消息元素
+         */
+        function createMessageElement(text, type, options = {}) {
+            // 系统消息：独立的简洁样式（居中灰字），与 CSS 选择器 .system-message 保持一致
+            if (type === 'system') {
+                const sysDiv = document.createElement('div');
+                sysDiv.className = 'system-message fade-in';
+                sysDiv.textContent = text;
+                return sysDiv;
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type} fade-in`;
+            
+            // 阶段4: 阅后即焚消息处理
+            if (options.burn) {
+                messageDiv.classList.add('burn-message');
+                const burnLabel = document.createElement('div');
+                burnLabel.className = 'burn-label';
+                burnLabel.textContent = '🔒 阅后即焚';
+                messageDiv.appendChild(burnLabel);
+            }
+            
+            // 阶段4: 文件消息处理
+            if (options.file) {
+                const fileBox = document.createElement('div');
+                fileBox.className = 'file-message-box';
+                
+                const icon = document.createElement('div');
+                icon.className = 'file-icon';
+                icon.textContent = getFileIcon(options.file.mimeType);
+                
+                const info = document.createElement('div');
+                info.className = 'file-info';
+                
+                const name = document.createElement('div');
+                name.className = 'file-name';
+                name.textContent = options.file.name;
+                
+                const size = document.createElement('div');
+                size.className = 'file-size';
+                size.textContent = formatFileSize(options.file.size);
+                
+                info.appendChild(name);
+                info.appendChild(size);
+                
+                // 如果是接收到的文件且有 blobData，添加下载按钮
+                if (options.file.blob) {
+                    const dlBtn = document.createElement('button');
+                    dlBtn.className = 'file-download-btn';
+                    dlBtn.textContent = '⬇ 下载';
+                    dlBtn.addEventListener('click', () => {
+                        downloadFile(options.file.blob, options.file.name);
+                    });
+                    info.appendChild(dlBtn);
+                }
+                
+                // 进度条（发送时显示）
+                if (options.file.progress !== undefined) {
+                    const progressContainer = document.createElement('div');
+                    progressContainer.className = 'file-progress-container';
+                    const progressBar = document.createElement('div');
+                    progressBar.className = 'file-progress-bar';
+                    const progressFill = document.createElement('div');
+                    progressFill.className = 'file-progress-fill';
+                    progressFill.style.width = options.file.progress + '%';
+                    const progressText = document.createElement('div');
+                    progressText.className = 'file-progress-text';
+                    progressText.textContent = options.file.progress + '%';
+                    progressBar.appendChild(progressFill);
+                    progressContainer.appendChild(progressBar);
+                    progressContainer.appendChild(progressText);
+                    info.appendChild(progressContainer);
+                    // 保存引用以便后续更新
+                    messageDiv._progressFill = progressFill;
+                    messageDiv._progressText = progressText;
+                }
+                
+                fileBox.appendChild(icon);
+                fileBox.appendChild(info);
+                messageDiv.appendChild(fileBox);
+                
+                // 如果是图片，添加预览
+                if (options.file.isImage && options.file.blob) {
+                    const img = document.createElement('img');
+                    img.className = 'message-image';
+                    img.src = URL.createObjectURL(options.file.blob);
+                    img.alt = options.file.name;
+                    messageDiv.appendChild(img);
+                }
+            } else {
+                // 普通文本消息
+                const textP = document.createElement('p');
+                textP.className = 'message-text';
+                textP.textContent = text;
+                messageDiv.appendChild(textP);
+            }
+            
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            timeDiv.textContent = getCurrentTime();
+            messageDiv.appendChild(timeDiv);
+            
+            return messageDiv;
+        }
+
+        /**
+         * 添加消息到消息列表
+         * @param {string} text - 消息内容
+         * @param {string} type - 消息类型
+         * @param {object} options - 可选参数 { burn: boolean, file: object }
+         * @returns {HTMLElement} 添加的消息元素（用于后续操作如阅后即焚定时）
+         */
+        function addMessage(text, type = 'sent', options = {}) {
+            const emptyState = elements.messages.querySelector('.empty-state');
+            if (emptyState) emptyState.remove();
+            const messageElement = createMessageElement(text, type, options);
+            elements.messages.appendChild(messageElement);
+            elements.messages.scrollTop = elements.messages.scrollHeight;
+            state.messages.push({ text, type, time: new Date().toISOString(), options });
+
+            // 阶段4: 阅后即焚 - 5秒后淡出消失
+            if (options.burn) {
+                setTimeout(() => {
+                    messageElement.classList.add('burn-out');
+                    // 动画结束后移除 DOM 元素（带兜底，防止动画被禁用或事件不触发）
+                    let removed = false;
+                    const removeOnce = () => {
+                        if (removed) return;
+                        removed = true;
+                        messageElement.remove();
+                    };
+                    messageElement.addEventListener('animationend', removeOnce, { once: true });
+                    // 兜底：1.5 秒后强制移除（覆盖动画被禁用、后台标签页、headless 等场景）
+                    setTimeout(removeOnce, 1500);
+                }, 5000);
+            }
+            
+            return messageElement;
+        }
+
+        /**
+         * 显示SDP文本区域（创建模式 - 输出 offer）
+         * @param {string} sdp - SDP内容
+         */
+        function showSDPOutput(sdp) {
+            elements.sdpText.value = sdp;
+            elements.sdpContainer.classList.add('show');
+        }
+
+        /**
+         * 显示SDP输入区域（加入模式 - 输入 offer）
+         */
+        function showSDPInput() {
+            elements.sdpInputContainer.classList.add('show');
+        }
+
+        /**
+         * 显示步骤提示
+         * @param {string} title - 标题
+         * @param {string[]} steps - 步骤列表
+         */
+        function showSteps(title, steps) {
+            elements.sdpStepsTitle.textContent = title;
+            elements.sdpStepsList.innerHTML = '';
+            steps.forEach(step => {
+                const li = document.createElement('li');
+                li.textContent = step;
+                elements.sdpStepsList.appendChild(li);
+            });
+            elements.sdpSteps.classList.add('show');
+        }
+
+        /**
+         * 隐藏所有SDP区域
+         */
+        function hideAllSDP() {
+            elements.sdpContainer.classList.remove('show');
+            elements.sdpInputContainer.classList.remove('show');
+            elements.sdpSteps.classList.remove('show');
+        }
+
+        /**
+         * 清空聊天消息
+         */
+        function clearChat() {
+            elements.messages.innerHTML = '';
+            state.messages = [];
+            const emptyState = document.createElement('div');
+            emptyState.className = 'empty-state';
+            emptyState.innerHTML = `
+                <div class="empty-state-icon">💬</div>
+                <p>开始聊天吧！消息将通过P2P直连发送。</p>
+            `;
+            elements.messages.appendChild(emptyState);
+            addMessage('聊天已清空', 'system');
+        }
+
+        /**
+         * 显示错误提示
+         * @param {string} message - 错误消息
+         */
+        function showError(message) {
+            addMessage(`❌ ${message}`, 'system');
+            // 等待面板可见时，同步显示错误（否则用户在连接页看不到聊天区消息）
+            if (elements.waitingPanel && !elements.waitingPanel.hidden) {
+                elements.waitingStatus.textContent = '❌ ' + message;
+                elements.waitingStatus.classList.add('error');
+            }
+            console.error(message);
+        }
+
+        /**
+         * 复制文本到剪贴板
+         * 兼容策略（三层防护）：
+         *   1. Clipboard API（HTTPS / localhost 安全上下文）
+         *   2. execCommand 回退（局域网 HTTP 非安全上下文、API 挂起或拒绝）
+         *   3. 选中内容引导手动复制（最终兜底）
+         * 注意：部分浏览器在窗口失焦等情况下 Clipboard API 的 Promise 会挂起（不返回），
+         *       因此必须加超时保护，避免按钮点击后无任何反应。
+         * @param {string} text - 要复制的文本
+         * @param {HTMLElement} btn - 按钮元素（用于状态反馈）
+         */
+        async function copyToClipboard(text, btn) {
+            let success = false;
+
+            // 方案1: Clipboard API（带超时保护）
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                try {
+                    await Promise.race([
+                        navigator.clipboard.writeText(text),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Clipboard API 超时')), 800))
+                    ]);
+                    success = true;
+                } catch (err) {
+                    console.warn('Clipboard API 复制失败/超时，尝试回退方案:', err);
+                }
+            }
+
+            // 方案2: execCommand 回退（兼容局域网 HTTP 非安全上下文与 API 挂起场景）
+            if (!success) {
+                try {
+                    const tempInput = document.createElement('textarea');
+                    tempInput.value = text;
+                    tempInput.style.position = 'fixed';
+                    tempInput.style.top = '0';
+                    tempInput.style.left = '-9999px';
+                    tempInput.setAttribute('readonly', '');
+                    document.body.appendChild(tempInput);
+                    tempInput.select();
+                    tempInput.setSelectionRange(0, text.length);
+                    success = document.execCommand('copy');
+                    document.body.removeChild(tempInput);
+                } catch (err) {
+                    console.warn('execCommand 复制失败:', err);
+                }
+            }
+
+            // 反馈
+            if (success) {
+                if (btn) {
+                    const originalText = btn.textContent;
+                    btn.textContent = '已复制！';
+                    btn.style.backgroundColor = 'var(--success)';
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.style.backgroundColor = '';
+                    }, 2000);
+                }
+            } else {
+                // 兜底：选中内容引导手动复制
+                if (elements.sdpText) {
+                    elements.sdpText.focus();
+                    elements.sdpText.select();
+                }
+                alert('自动复制受限，已为您选中内容，请按 Ctrl+C 手动复制');
+            }
+        }
+
+        // ==================== 阶段4: 文件下载 ====================
+
+        /**
+         * 触发浏览器下载
+         * @param {Blob} blob - 文件 Blob
+         * @param {string} fileName - 文件名
+         */
+        function downloadFile(blob, fileName) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            // 延迟释放 Blob URL：部分环境下浏览器下载启动存在延迟，立即 revoke 可能导致下载被取消
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        // ==================== 阶段4: 文件传输 ====================
+
+        /**
+         * 阶段4: 通过 DataChannel 发送文件（分片传输）
+         * @param {File} file - 要发送的文件
+         */
+        async function sendFile(file) {
+            if (!state.dataChannel || state.dataChannel.readyState !== 'open') {
+                showError('数据通道未就绪，无法发送文件');
+                return;
+            }
+
+            const totalChunks = Math.ceil(file.size / FILE_CHUNK_SIZE);
+            
+            // 先发送文件元信息（JSON协议）
+            const metaMsg = {
+                __type: 'file-meta',
+                name: file.name,
+                size: file.size,
+                mimeType: file.type || 'application/octet-stream',
+                totalChunks: totalChunks
+            };
+            state.dataChannel.send(JSON.stringify(metaMsg));
+
+            // 在消息区显示发送中的文件消息（带进度条）
+            const fileMsgEl = addMessage('', 'sent', {
+                file: {
+                    name: file.name,
+                    size: file.size,
+                    mimeType: file.type,
+                    progress: 0,
+                    isImage: file.type && file.type.startsWith('image/')
+                }
+            });
+
+            // 读取文件并分片发送
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                let sentChunks = 0;
+
+                for (let offset = 0; offset < file.size; offset += FILE_CHUNK_SIZE) {
+                    const chunk = arrayBuffer.slice(offset, offset + FILE_CHUNK_SIZE);
+                    // 将 ArrayBuffer 转为 Base64 传输（DataChannel string 模式下兼容性好）
+                    const base64 = arrayBufferToBase64(chunk);
+                    
+                    const chunkMsg = {
+                        __type: 'file-chunk',
+                        name: file.name,
+                        index: sentChunks,
+                        total: totalChunks,
+                        data: base64
+                    };
+                    state.dataChannel.send(JSON.stringify(chunkMsg));
+                    sentChunks++;
+
+                    // 更新进度条
+                    const progress = Math.round((sentChunks / totalChunks) * 100);
+                    if (fileMsgEl._progressFill) {
+                        fileMsgEl._progressFill.style.width = progress + '%';
+                    }
+                    if (fileMsgEl._progressText) {
+                        fileMsgEl._progressText.textContent = progress + '%';
+                    }
+
+                    // 让出主线程，避免阻塞 UI
+                    await new Promise(r => setTimeout(r, 0));
+                }
+
+                // 全部发送完成后统一更新为完成态（空文件时循环不执行，也能正确显示）
+                if (fileMsgEl._progressFill) {
+                    fileMsgEl._progressFill.style.width = '100%';
+                    fileMsgEl._progressFill.style.backgroundColor = 'var(--success)';
+                }
+                if (fileMsgEl._progressText) {
+                    fileMsgEl._progressText.textContent = '✓ 已发送';
+                }
+
+                // 发送文件传输结束标记
+                const endMsg = { __type: 'file-end', name: file.name };
+                state.dataChannel.send(JSON.stringify(endMsg));
+                
+            } catch (err) {
+                console.error('文件发送失败:', err);
+                showError(`文件发送失败：${err.message}`);
+            }
+        }
+
+        /**
+         * 阶段4: 处理接收到的结构化消息
+         * @param {string} jsonString - JSON 字符串消息
+         * @returns {boolean} 是否是结构化消息（已处理）
+         */
+        function handleStructuredMessage(jsonString) {
+            let msg;
+            try {
+                msg = JSON.parse(jsonString);
+            } catch (e) {
+                // 不是 JSON，作为普通文本消息处理
+                return false;
+            }
+
+            if (!msg || !msg.__type) {
+                // 没有 __type 字段，当作普通文本消息
+                return false;
+            }
+
+            switch (msg.__type) {
+                case 'file-meta':
+                    // 初始化接收文件的存储
+                    state.fileTransfers[msg.name] = {
+                        received: 0,
+                        total: msg.totalChunks,
+                        size: msg.size,
+                        mimeType: msg.mimeType,
+                        chunks: [],
+                        startTime: Date.now()
+                    };
+                    addMessage(`📥 正在接收文件: ${msg.name} (${formatFileSize(msg.size)})`, 'system');
+                    return true;
+
+                case 'file-chunk': {
+                    const transfer = state.fileTransfers[msg.name];
+                    if (!transfer) {
+                        console.warn('未找到文件传输记录:', msg.name);
+                        return true;
+                    }
+                    // 解码 Base64 数据
+                    const chunkData = base64ToArrayBuffer(msg.data);
+                    transfer.chunks[msg.index] = chunkData;
+                    transfer.received++;
+
+                    // 通知进度
+                    const progress = Math.round((transfer.received / transfer.total) * 100);
+                    console.log(`文件接收进度: ${msg.name} ${progress}%`);
+                    return true;
+                }
+
+                case 'file-end': {
+                    const transfer = state.fileTransfers[msg.name];
+                    if (!transfer) return true;
+                    
+                    // 合并所有 chunks
+                    const blob = new Blob(transfer.chunks, { type: transfer.mimeType });
+                    
+                    // 在消息区显示接收完成的文件（带下载按钮和图片预览）
+                    addMessage('', 'received', {
+                        file: {
+                            name: msg.name,
+                            size: transfer.size,
+                            mimeType: transfer.mimeType,
+                            blob: blob,
+                            isImage: transfer.mimeType && transfer.mimeType.startsWith('image/')
+                        }
+                    });
+
+                    addMessage(`✅ 文件接收完成: ${msg.name}`, 'system');
+                    
+                    // 清理传输记录
+                    delete state.fileTransfers[msg.name];
+                    return true;
+                }
+
+                case 'burn': {
+                    // 阶段4: 阅后即焚消息
+                    addMessage(msg.text, 'received', { burn: true });
+                    return true;
+                }
+
+                default:
+                    return false;
+            }
+        }
+
+        /**
+         * 阶段4: ArrayBuffer 转 Base64
+         * @param {ArrayBuffer} buffer
+         * @returns {string} Base64 字符串
+         */
+        function arrayBufferToBase64(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            const chunkSize = 8192;
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                const chunk = bytes.subarray(i, i + chunkSize);
+                binary += String.fromCharCode.apply(null, chunk);
+            }
+            return btoa(binary);
+        }
+
+        /**
+         * 阶段4: Base64 转 ArrayBuffer
+         * @param {string} base64
+         * @returns {ArrayBuffer}
+         */
+        function base64ToArrayBuffer(base64) {
+            const binary = atob(base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        // ==================== WebRTC 核心实现 ====================
+
+        /**
+         * 创建 RTCPeerConnection 并绑定通用事件
+         * @returns {RTCPeerConnection}
+         */
+        function createPeerConnection() {
+            const pc = new RTCPeerConnection(rtcConfig);
+
+            // ICE candidate 处理
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    console.log('ICE candidate:', event.candidate);
+                }
+            };
+
+            // 连接状态变化
+            pc.onconnectionstatechange = () => {
+                console.log('Connection state:', pc.connectionState);
+                switch (pc.connectionState) {
+                    case 'connecting':
+                        updateConnectionStatus('connecting');
+                        break;
+                    case 'connected':
+                        stopRoomPolling();     // 数字房间模式：连接成功即停止轮询
+                        clearConnectTimeout(); // 连接成功，清除超时保护（避免误断正常会话）
+                        updateConnectionStatus('connected');
+                        addMessage('对方已连接', 'system');
+                        // 切换到聊天视图
+                        switchView('chat-view');
+                        break;
+                    case 'disconnected':
+                        clearConnectTimeout();
+                        updateConnectionStatus('disconnected');
+                        addMessage('对方已断开连接', 'system');
+                        break;
+                    case 'failed':
+                        stopRoomPolling();
+                        clearConnectTimeout();
+                        updateConnectionStatus('failed');
+                        showError('连接失败，请确认两台设备在同一 WiFi 且路由器未开启 AP 隔离');
+                        break;
+                    case 'closed':
+                        clearConnectTimeout();
+                        updateConnectionStatus('disconnected');
+                        break;
+                }
+            };
+
+            // ICE 连接状态
+            pc.oniceconnectionstatechange = () => {
+                console.log('ICE connection state:', pc.iceConnectionState);
+                if (pc.iceConnectionState === 'failed') {
+                    updateConnectionStatus('failed');
+                    showError('ICE 协商失败，可能需要检查网络配置');
+                }
+            };
+
+            return pc;
+        }
+
+        /**
+         * 创建 DataChannel 并绑定事件
+         * @param {RTCPeerConnection} pc - 对等连接
+         * @returns {RTCDataChannel}
+         */
+        function createDataChannel(pc) {
+            const channel = pc.createDataChannel('chat');
+
+            channel.onopen = () => {
+                console.log('DataChannel opened');
+                addMessage('📡 数据通道已就绪', 'system');
+            };
+
+            channel.onclose = () => {
+                console.log('DataChannel closed');
+                addMessage('📡 数据通道已关闭', 'system');
+            };
+
+            channel.onerror = (event) => {
+                console.error('DataChannel error:', event);
+                showError('数据通道错误');
+            };
+
+            channel.onmessage = (event) => {
+                console.log('Received message:', event.data);
+                // 阶段4: 先尝试解析为结构化消息
+                if (typeof event.data === 'string') {
+                    const handled = handleStructuredMessage(event.data);
+                    if (!handled) {
+                        addMessage(event.data, 'received');
+                    }
+                } else {
+                    // ArrayBuffer 类型的数据直接显示
+                    addMessage('[收到二进制数据]', 'received');
+                }
+            };
+
+            return channel;
+        }
+
+        /**
+         * 处理接收到的 DataChannel（加入方）
+         * @param {RTCPeerConnection} pc - 对等连接
+         */
+        function setupIncomingDataChannel(pc) {
+            pc.ondatachannel = (event) => {
+                console.log('Incoming data channel:', event.channel);
+                state.dataChannel = event.channel;
+
+                event.channel.onopen = () => {
+                    console.log('DataChannel (incoming) opened');
+                    addMessage('📡 数据通道已就绪', 'system');
+                };
+
+                event.channel.onclose = () => {
+                    console.log('DataChannel (incoming) closed');
+                    addMessage('📡 数据通道已关闭', 'system');
+                };
+
+                event.channel.onerror = (event) => {
+                    console.error('DataChannel (incoming) error:', event);
+                    showError('数据通道错误');
+                };
+
+                event.channel.onmessage = (event) => {
+                    console.log('Received message:', event.data);
+                    // 阶段4: 先尝试解析为结构化消息
+                    if (typeof event.data === 'string') {
+                        const handled = handleStructuredMessage(event.data);
+                        if (!handled) {
+                            addMessage(event.data, 'received');
+                        }
+                    } else {
+                        addMessage('[收到二进制数据]', 'received');
+                    }
+                };
+            };
+        }
+
+        /**
+         * 创建连接（创建方流程）
+         */
+        async function handleCreate() {
+            state.mode = 'create';
+            
+            // 隐藏数字房间面板，避免并行操作冲突
+            elements.roomPanel.hidden = true;
+            // 隐藏主按钮，显示返回按钮
+            elements.mainButtons.style.display = 'none';
+            elements.backBtn.style.display = 'flex';
+
+            try {
+                const pc = createPeerConnection();
+                state.peerConnection = pc;
+
+                // 创建 DataChannel
+                state.dataChannel = createDataChannel(pc);
+
+                // 创建 Offer
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // 等待 ICE gathering 完成
+                await waitForIceGathering(pc);
+
+                // 输出完整的 SDP（包含 ICE candidates，并修复 mDNS 候选）
+                const completeSDP = JSON.stringify(fixMdnsInSdp(pc.localDescription), null, 2);
+                showSDPOutput(completeSDP);
+
+                showSteps('创建方步骤', [
+                    '1. 点击"复制到剪贴板"复制上方的 SDP',
+                    '2. 通过其他方式（微信、QQ等）发送给对方',
+                    '3. 等待对方回复 Answer SDP',
+                    '4. 将对方的 Answer SDP 粘贴到下方输入框',
+                    '5. 点击"提交 Answer"完成连接'
+                ]);
+
+                // 显示 answer 输入区域
+                elements.sdpInputContainer.classList.add('show');
+                elements.sdpInputText.placeholder = '粘贴对方回复的 Answer SDP...';
+                elements.submitSdpBtn.textContent = '提交 Answer';
+                document.querySelector('#sdp-input-container .sdp-label').textContent = '粘贴对方回复的 Answer SDP：';
+
+                updateConnectionStatus('connecting');
+                addMessage('📡 正在创建连接...', 'system');
+
+            } catch (err) {
+                console.error('创建连接失败:', err);
+                showError(`创建连接失败：${err.message}`);
+                resetConnectView();
+            }
+        }
+
+        /**
+         * 加入连接（加入方流程）
+         */
+        async function handleJoin() {
+            state.mode = 'join';
+            
+            // 隐藏数字房间面板，避免并行操作冲突
+            elements.roomPanel.hidden = true;
+            // 隐藏主按钮，显示返回按钮
+            elements.mainButtons.style.display = 'none';
+            elements.backBtn.style.display = 'flex';
+            
+            // 显示 SDP 输入区域
+            showSDPInput();
+            elements.sdpInputText.placeholder = '在此粘贴对方的 Offer SDP 内容...';
+            elements.submitSdpBtn.textContent = '提交 Offer';
+            document.querySelector('#sdp-input-container .sdp-label').textContent = '粘贴对方发送的 Offer SDP：';
+
+            showSteps('加入方步骤', [
+                '1. 让对方先点击"创建连接"并发送 SDP',
+                '2. 将对方的 Offer SDP 粘贴到输入框',
+                '3. 点击"提交 Offer"按钮',
+                '4. 复制生成的 Answer SDP 发送给对方',
+                '5. 连接将自动建立'
+            ]);
+        }
+
+        /**
+         * 处理提交的 SDP
+         */
+        async function handleSubmitSDP() {
+            const sdpText = elements.sdpInputText.value.trim();
+            if (!sdpText) {
+                alert('请先粘贴 SDP 内容');
+                return;
+            }
+
+            try {
+                const remoteSDP = JSON.parse(sdpText);
+
+                if (state.mode === 'create') {
+                    await handleCreateReceiveAnswer(remoteSDP);
+                } else if (state.mode === 'join') {
+                    await handleJoinReceiveOffer(remoteSDP);
+                }
+            } catch (err) {
+                console.error('SDP 解析或处理失败:', err);
+                if (err instanceof SyntaxError) {
+                    showError('SDP 格式错误，请确保粘贴的是完整的 JSON 格式 SDP');
+                } else {
+                    showError(`连接失败：${err.message}`);
+                }
+            }
+        }
+
+        /**
+         * 创建方处理接收到的 Answer SDP
+         */
+        async function handleCreateReceiveAnswer(answer) {
+            const pc = state.peerConnection;
+            if (!pc) {
+                showError('未找到 PeerConnection，请重新创建连接');
+                return;
+            }
+
+            await pc.setRemoteDescription(new RTCSessionDescription(answer));
+            addMessage('✅ Answer 已提交，正在建立连接...', 'system');
+            hideAllSDP();
+        }
+
+        /**
+         * 加入方处理接收到的 Offer SDP
+         */
+        async function handleJoinReceiveOffer(offer) {
+            const pc = createPeerConnection();
+            state.peerConnection = pc;
+
+            // 设置接收 DataChannel 的回调
+            setupIncomingDataChannel(pc);
+
+            // 设置远程描述（Offer）
+            await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+            // 创建 Answer
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+
+            // 等待 ICE gathering 完成
+            await waitForIceGathering(pc);
+
+            // 输出 Answer SDP（修复 mDNS 候选）
+            const completeSDP = JSON.stringify(fixMdnsInSdp(pc.localDescription), null, 2);
+            showSDPOutput(completeSDP);
+
+            elements.sdpContainer.querySelector('.sdp-label').textContent = '复制以下 Answer 发送给对方：';
+
+            updateConnectionStatus('connecting');
+            addMessage('📡 已生成 Answer，等待连接建立...', 'system');
+        }
+
+        /**
+         * 等待 ICE gathering 完成
+         */
+        function waitForIceGathering(pc, timeout = 5000) {
+            return new Promise((resolve, reject) => {
+                if (pc.iceGatheringState === 'complete') {
+                    resolve();
+                    return;
+                }
+
+                const timer = setTimeout(() => {
+                    console.warn('ICE gathering timed out, proceeding with available candidates');
+                    resolve();
+                }, timeout);
+
+                pc.onicegatheringstatechange = () => {
+                    if (pc.iceGatheringState === 'complete') {
+                        clearTimeout(timer);
+                        resolve();
+                    }
+                };
+
+                pc.onicecandidateerror = (event) => {
+                    console.warn('ICE candidate error:', event);
+                };
+            });
+        }
+
+        // ==================== 数字房间号模式 ====================
+
+        /**
+         * 修复 SDP 中的 mDNS 候选地址（局域网连接失败的最常见根因）
+         *
+         * 背景：Chrome/Edge 出于隐私保护，会把 WebRTC 候选中的局域网 IP
+         * 替换为随机 .local 域名（mDNS 混淆）。跨设备时对方设备往往无法
+         * 解析该域名，导致 ICE 协商失败、连接卡住。
+         * 修复：将 .local 候选替换为服务器视角的真实局域网 IP。
+         */
+        function fixMdnsInSdp(sessionDesc) {
+            if (!sessionDesc || !sessionDesc.sdp) return sessionDesc;
+            if (!state.hostIp) {
+                console.warn('本机 IP 未知，跳过 mDNS 候选修复');
+                return sessionDesc;
+            }
+            const fixedSdp = sessionDesc.sdp.replace(
+                /(a=candidate:\S+ \d+ \S+ \d+ )\S+\.local( \d+ typ \S+)/gi,
+                `$1${state.hostIp}$2`
+            );
+            if (fixedSdp !== sessionDesc.sdp) {
+                console.log(`mDNS 候选已修复为 ${state.hostIp}`);
+            }
+            return { type: sessionDesc.type, sdp: fixedSdp };
+        }
+
+        /**
+         * 获取服务器视角的本机局域网 IP（用于 mDNS 修复）
+         */
+        async function fetchHostIp() {
+            try {
+                const res = await fetchWithTimeout('/api/ip', {}, 3000);
+                const data = await res.json();
+                state.hostIp = pickBestLocalIp(data.ip, data.serverIPs || []);
+                if (state.hostIp) {
+                    console.log('mDNS 修复已就绪，本机局域网 IP:', state.hostIp);
+                }
+            } catch (err) {
+                console.warn('获取本机 IP 失败（mDNS 修复将不可用）:', err);
+            }
+        }
+
+        /**
+         * 选择最合适的本机局域网 IP
+         * @param {string} clientIp - 服务器视角的客户端 IP
+         * @param {string[]} serverIPs - 服务器所有网卡 IPv4 地址
+         */
+        function pickBestLocalIp(clientIp, serverIPs) {
+            // 跨设备访问：服务器看到的客户端 IP 就是发送方真实局域网 IP
+            if (clientIp && clientIp !== '127.0.0.1' && clientIp !== '::1') {
+                return clientIp;
+            }
+            // 本机访问：从服务器网卡列表中挑选（排除 WSL/Docker/VirtualBox 虚拟网卡）
+            const isVirtual = ip =>
+                /^172\.(1[7-9]|2\d|3[01])\./.test(ip) ||   // WSL/Docker 常见段
+                /^192\.168\.56\./.test(ip);                // VirtualBox 常用段
+            const isPrivate = ip =>
+                /^(192\.168\.|10\.)/.test(ip) || /^172\.(1[6-9]|2\d|3[01])\./.test(ip);
+            const candidates = serverIPs.filter(isPrivate);
+            return candidates.find(ip => !isVirtual(ip)) || candidates[0] || null;
+        }
+
+        /**
+         * 带超时的 fetch 封装（避免请求悬挂）
+         */
+        function fetchWithTimeout(url, options = {}, timeout = 8000) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeout);
+            return fetch(url, { ...options, signal: controller.signal })
+                .finally(() => clearTimeout(timer));
+        }
+
+        /** GET 请求封装 */
+        async function apiGet(path, query) {
+            const qs = query ? '?' + new URLSearchParams(query).toString() : '';
+            const res = await fetchWithTimeout(path + qs);
+            const data = await res.json().catch(() => ({}));
+            return { status: res.status, data };
+        }
+
+        /** POST 请求封装 */
+        async function apiPost(path, body) {
+            const res = await fetchWithTimeout(path, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await res.json().catch(() => ({}));
+            return { status: res.status, data };
+        }
+
+        /**
+         * 显示等待连接面板
+         */
+        function showWaiting(code, message) {
+            elements.roomPanel.hidden = true;
+            elements.waitingPanel.hidden = false;
+            elements.waitingCode.textContent = code;
+            elements.waitingStatus.textContent = message;
+            elements.waitingStatus.classList.remove('error');
+            elements.shareUrl.textContent = location.origin + location.pathname + '?room=' + code;
+            elements.enterRoomBtn.disabled = false;
+            elements.enterRoomBtn.textContent = '进 入';
+        }
+
+        /** 更新等待面板状态文案 */
+        function updateWaitingStatus(message) {
+            elements.waitingStatus.textContent = message;
+            elements.waitingStatus.classList.remove('error');
+        }
+
+        /** 停止房间轮询 */
+        function stopRoomPolling() {
+            if (state.pollTimer) {
+                clearTimeout(state.pollTimer);
+                state.pollTimer = null;
+            }
+        }
+
+        /** 启动/重置会话超时保护 */
+        function startConnectTimeout(seconds) {
+            clearConnectTimeout();
+            state.connectTimeout = setTimeout(() => {
+                stopRoomPolling();
+                showError(`连接超时（${seconds} 秒无响应），请返回重试`);
+                cleanupRoom(true);
+                resetConnectView();
+            }, seconds * 1000);
+        }
+
+        /** 清除会话超时 */
+        function clearConnectTimeout() {
+            if (state.connectTimeout) {
+                clearTimeout(state.connectTimeout);
+                state.connectTimeout = null;
+            }
+        }
+
+        /**
+         * 清理房间会话资源
+         * @param {boolean} closeRoom - 是否通知服务器关闭房间（仅创建方有效）
+         */
+        function cleanupRoom(closeRoom) {
+            stopRoomPolling();
+            clearConnectTimeout();
+
+            if (closeRoom && state.roomCode && state.roomRole === 'host') {
+                apiPost('/api/close', { room: state.roomCode }).catch(() => {});
+            }
+
+            if (state.dataChannel) {
+                try { state.dataChannel.close(); } catch (e) { /* 忽略 */ }
+                state.dataChannel = null;
+            }
+            if (state.peerConnection) {
+                try { state.peerConnection.close(); } catch (e) { /* 忽略 */ }
+                state.peerConnection = null;
+            }
+        }
+
+        /**
+         * 进入房间主入口（先到者创建，后到者加入）
+         */
+        async function enterRoom() {
+            const code = elements.roomCodeInput.value.trim();
+
+            if (!/^\d{4}$/.test(code)) {
+                alert('请输入 4 位数字房间号');
+                elements.roomCodeInput.focus();
+                return;
+            }
+
+            elements.enterRoomBtn.disabled = true;
+            elements.enterRoomBtn.textContent = '连接中…';
+
+            try {
+                // 先尝试创建房间（原子操作：成功=创建方，409=已有房间，作为加入方）
+                const createRes = await apiPost('/api/room', { room: code });
+
+                if (createRes.status === 200) {
+                    state.roomCode = code;
+                    state.roomRole = 'host';
+                    showWaiting(code, '正在创建房间…');
+                    await startAsHost(code);
+                } else if (createRes.status === 409) {
+                    state.roomCode = code;
+                    state.roomRole = 'guest';
+                    showWaiting(code, '已找到房间，正在等待对方就绪…');
+                    startAsGuest(code);
+                } else {
+                    throw new Error(createRes.data.error || '房间操作失败');
+                }
+            } catch (err) {
+                console.error('进入房间失败:', err);
+                elements.waitingPanel.hidden = true;
+                elements.roomPanel.hidden = false;
+                elements.enterRoomBtn.disabled = false;
+                elements.enterRoomBtn.textContent = '进 入';
+                alert('进入失败：' + (err.message || '网络错误，请确认服务器已启动'));
+            }
+        }
+
+        /**
+         * 创建方流程：创建 Offer → 上传 → 轮询 Answer
+         */
+        async function startAsHost(code) {
+            cleanupRoom(false); // 清理上一次残留
+
+            try {
+                const pc = createPeerConnection();
+                state.peerConnection = pc;
+                state.dataChannel = createDataChannel(pc);
+
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                await waitForIceGathering(pc);
+
+                // 上传 Offer（含 mDNS 修复）
+                const offerPayload = JSON.stringify(fixMdnsInSdp(pc.localDescription));
+                const up = await apiPost('/api/offer', { room: code, offer: offerPayload });
+                if (up.status !== 200) {
+                    throw new Error(up.data.error || '房间已失效，请重新进入');
+                }
+
+                updateWaitingStatus('房间已就绪，等待朋友输入相同数字加入…');
+                startConnectTimeout(300); // 等待朋友最多 5 分钟
+
+                // 轮询等待 Answer
+                const pollForAnswer = async () => {
+                    let next = true;
+                    try {
+                        const res = await apiGet('/api/answer', { room: code });
+
+                        if (res.status === 404) {
+                            showError('房间已过期，请返回重新进入');
+                            next = false;
+                        } else if (res.status === 200 && res.data.answer) {
+                            // 收到 Answer！
+                            next = false;
+                            stopRoomPolling();
+                            clearConnectTimeout();
+
+                            try {
+                                await pc.setRemoteDescription(
+                                    new RTCSessionDescription(JSON.parse(res.data.answer))
+                                );
+                                updateWaitingStatus('已收到对方回应，正在打通连接…');
+                                startConnectTimeout(60); // 协商最多 60 秒
+                                // 房间任务完成，释放房间号
+                                apiPost('/api/close', { room: code }).catch(() => {});
+                            } catch (e) {
+                                console.error('设置远程描述失败:', e);
+                                showError('连接协商失败：' + e.message);
+                                cleanupRoom(true);
+                                resetConnectView();
+                            }
+                            return;
+                        } else if (res.data.offerPulled) {
+                            updateWaitingStatus('朋友已找到房间，正在协商连接…');
+                            startConnectTimeout(60); // 对方已进入，缩短等待
+                        }
+                    } catch (err) {
+                        console.warn('轮询 answer 失败:', err);
+                    }
+                    if (next) {
+                        state.pollTimer = setTimeout(pollForAnswer, 1500);
+                    }
+                };
+                state.pollTimer = setTimeout(pollForAnswer, 600);
+
+            } catch (err) {
+                console.error('创建房间失败:', err);
+                showError('创建房间失败：' + (err.message || '未知错误'));
+                cleanupRoom(true);
+                resetConnectView();
+            }
+        }
+
+        /**
+         * 加入方流程：轮询 Offer → 生成 Answer → 上传
+         */
+        function startAsGuest(code) {
+            state.pollErrors = 0;
+
+            const pollForOffer = async () => {
+                let next = true;
+                try {
+                    const res = await apiGet('/api/offer', { room: code });
+
+                    if (res.status === 404) {
+                        updateWaitingStatus('房间不存在或已过期，请让朋友重新创建');
+                        next = false;
+                    } else if (res.status === 200 && res.data.offer) {
+                        // 拿到 Offer！
+                        next = false;
+                        stopRoomPolling();
+                        updateWaitingStatus('已找到房间，正在协商连接…');
+                        try {
+                            await guestConnect(code, res.data.offer);
+                        } catch (e) {
+                            console.error('加入房间失败:', e);
+                            showError('加入失败：' + (e.message || '未知错误'));
+                            cleanupRoom(false);
+                            resetConnectView();
+                        }
+                        return;
+                    }
+                    // res.data.waiting === true → 继续轮询
+                } catch (err) {
+                    console.warn('轮询 offer 失败:', err);
+                    state.pollErrors = (state.pollErrors || 0) + 1;
+                    if (state.pollErrors >= 8) {
+                        showError('网络异常，无法连接到服务器');
+                        next = false;
+                        cleanupRoom(false);
+                        resetConnectView();
+                        return;
+                    }
+                }
+                if (next) {
+                    state.pollTimer = setTimeout(pollForOffer, 1200);
+                }
+            };
+
+            startConnectTimeout(300); // 等待房间就绪最多 5 分钟
+            state.pollTimer = setTimeout(pollForOffer, 400);
+        }
+
+        /**
+         * 加入方：处理 Offer 并上传 Answer
+         */
+        async function guestConnect(code, offerPayload) {
+            clearConnectTimeout();
+
+            const pc = createPeerConnection();
+            state.peerConnection = pc;
+            setupIncomingDataChannel(pc);
+
+            await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(offerPayload)));
+
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            await waitForIceGathering(pc);
+
+            // 上传 Answer（含 mDNS 修复）
+            const answerPayload = JSON.stringify(fixMdnsInSdp(pc.localDescription));
+            const up = await apiPost('/api/answer', { room: code, answer: answerPayload });
+
+            if (up.status === 409) {
+                throw new Error('该房间已被其他人加入，请换一个房间号');
+            }
+            if (up.status !== 200) {
+                throw new Error(up.data.error || '回应上传失败');
+            }
+
+            updateWaitingStatus('回应已发送，正在建立 P2P 连接…');
+            startConnectTimeout(60); // 等待 P2P 打通最多 60 秒
+        }
+
+        /**
+         * 阶段3: 重置连接视图到初始状态（支持断线后重新连接）
+         */
+        function resetConnectView() {
+            stopRoomPolling(); // 数字房间模式：停止轮询
+
+            hideAllSDP();
+            elements.mainButtons.style.display = '';
+            elements.backBtn.style.display = 'none';
+            elements.backToConnect.classList.remove('show');
+            elements.sdpInputText.value = '';
+            elements.sdpText.value = '';
+            state.mode = null;
+
+            // 恢复数字房间面板
+            elements.roomPanel.hidden = false;
+            elements.waitingPanel.hidden = true;
+            state.roomCode = null;
+            state.roomRole = null;
+
+            // 清理旧连接
+            if (state.dataChannel) {
+                state.dataChannel.close();
+                state.dataChannel = null;
+            }
+            if (state.peerConnection) {
+                state.peerConnection.close();
+                state.peerConnection = null;
+            }
+
+            // 清理文件传输记录
+            state.fileTransfers = {};
+
+            // 重置连接状态
+            state.isConnected = false;
+            elements.statusDot.classList.remove('connected');
+            elements.statusText.textContent = '未连接';
+            elements.statusDot.style.backgroundColor = '';
+            
+            // 重置输入状态
+            setInputDisabled(true);
+
+            // 切换回连接视图
+            switchView('connect-view');
+            
+            // 重置阅后即焚模式
+            state.burnMode = false;
+            elements.burnToggle.classList.remove('active');
+            elements.burnToggle.textContent = '🔒 阅后即焚';
+        }
+
+        // ==================== 消息发送 ====================
+
+        /**
+         * 通过 DataChannel 发送消息
+         */
+        function sendMessage() {
+            const text = elements.messageInput.value.trim();
+            if (!text) return;
+
+            if (!state.dataChannel || state.dataChannel.readyState !== 'open') {
+                showError('数据通道未就绪，无法发送消息');
+                return;
+            }
+
+            try {
+                // 阶段4: 阅后即焚模式
+                if (state.burnMode) {
+                    const burnMsg = { __type: 'burn', text: text };
+                    state.dataChannel.send(JSON.stringify(burnMsg));
+                    addMessage(text, 'sent', { burn: true });
+                } else {
+                    state.dataChannel.send(text);
+                    addMessage(text, 'sent');
+                }
+
+                // 清空输入框
+                elements.messageInput.value = '';
+                elements.messageInput.style.height = 'auto';
+            } catch (err) {
+                console.error('发送消息失败:', err);
+                showError(`发送失败：${err.message}`);
+            }
+        }
+
+        // ==================== 事件绑定 ====================
+
+        // 创建连接按钮
+        elements.createBtn.addEventListener('click', handleCreate);
+
+        // 加入连接按钮
+        elements.joinBtn.addEventListener('click', handleJoin);
+
+        // 复制 SDP 按钮
+        elements.copySdpBtn.addEventListener('click', () => {
+            copyToClipboard(elements.sdpText.value, elements.copySdpBtn);
+        });
+
+        // 从剪贴板粘贴按钮
+        elements.pasteSdpBtn.addEventListener('click', async () => {
+            // 优先 Clipboard API（需安全上下文）
+            if (navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    if (text) {
+                        elements.sdpInputText.value = text;
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('读取剪贴板失败:', err);
+                }
+            }
+            // 回退：聚焦输入框，引导手动粘贴
+            elements.sdpInputText.focus();
+            alert('当前环境浏览器限制了直接读取剪贴板，请手动粘贴：在输入框中按 Ctrl+V');
+        });
+
+        // 提交 SDP 按钮
+        elements.submitSdpBtn.addEventListener('click', handleSubmitSDP);
+
+        // 返回按钮（连接页）
+        elements.backBtn.addEventListener('click', resetConnectView);
+
+        // 阶段3: 返回连接页按钮（聊天页断线后显示）
+        elements.backToConnect.addEventListener('click', () => {
+            resetConnectView();
+        });
+
+        // 发送消息按钮
+        elements.sendBtn.addEventListener('click', sendMessage);
+
+        // 输入框回车发送
+        elements.messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // 输入框自动调整高度
+        elements.messageInput.addEventListener('input', () => {
+            elements.messageInput.style.height = 'auto';
+            elements.messageInput.style.height = Math.min(elements.messageInput.scrollHeight, 120) + 'px';
+        });
+
+        // 清空聊天按钮
+        elements.clearChatBtn.addEventListener('click', clearChat);
+
+        // ==================== 阶段4: 文件传输与阅后即焚事件绑定 ====================
+
+        // 阅后即焚切换按钮
+        elements.burnToggle.addEventListener('click', () => {
+            state.burnMode = !state.burnMode;
+            if (state.burnMode) {
+                elements.burnToggle.classList.add('active');
+                elements.burnToggle.textContent = '🔥 阅后即焚 ON';
+            } else {
+                elements.burnToggle.classList.remove('active');
+                elements.burnToggle.textContent = '🔒 阅后即焚';
+            }
+        });
+
+        // 附件按钮 - 触发文件选择
+        elements.attachBtn.addEventListener('click', () => {
+            elements.fileInput.click();
+        });
+
+        // 文件选择变化事件
+        elements.fileInput.addEventListener('change', async (event) => {
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
+
+            for (const file of files) {
+                await sendFile(file);
+            }
+
+            // 清空 input 以支持重复选择同一文件
+            elements.fileInput.value = '';
+        });
+
+        // ==================== 数字房间号模式事件绑定 ====================
+
+        // 房间号输入框：仅允许数字
+        elements.roomCodeInput.addEventListener('input', () => {
+            elements.roomCodeInput.value = elements.roomCodeInput.value.replace(/\D/g, '').slice(0, 4);
+        });
+
+        // 回车快捷进入
+        elements.roomCodeInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                enterRoom();
+            }
+        });
+
+        // 进入按钮
+        elements.enterRoomBtn.addEventListener('click', enterRoom);
+
+        // 复制分享链接
+        elements.copyUrlBtn.addEventListener('click', () => {
+            copyToClipboard(elements.shareUrl.textContent, elements.copyUrlBtn);
+        });
+
+        // 取消等待
+        elements.cancelWaitBtn.addEventListener('click', () => {
+            cleanupRoom(true);
+            state.roomCode = null;
+            state.roomRole = null;
+            elements.waitingPanel.hidden = true;
+            elements.roomPanel.hidden = false;
+            elements.enterRoomBtn.disabled = false;
+            elements.enterRoomBtn.textContent = '进 入';
+        });
+
+        // ==================== 初始化 ====================
+        function init() {
+            // 检测协议
+            checkProtocol();
+
+            // 数字房间模式可用时：获取本机 IP（mDNS 修复）并解析 URL 房间号
+            if (SIGNAL_BASE !== null) {
+                fetchHostIp();
+
+                // 支持分享链接自动填充：?room=1234
+                const params = new URLSearchParams(location.search);
+                const roomParam = (params.get('room') || '').trim();
+                if (/^\d{4}$/.test(roomParam)) {
+                    elements.roomCodeInput.value = roomParam;
+                    elements.enterRoomBtn.focus();
+                }
+            }
+
+            // 确保初始视图正确显示
+            switchView('connect-view');
+            updateConnectionStatus('disconnected');
+
+            console.log('局域网匿名聊天室已初始化（数字房间号模式 + 手动 SDP 模式）');
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
