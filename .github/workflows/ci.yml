@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: 端到端测试（Ubuntu + 无头 Chrome）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 确认浏览器可用
+        run: |
+          google-chrome --version || chromium --version || chromium-browser --version
+
+      - name: 启动信令服务器（1808）
+        run: |
+          nohup node server.js 1808 > /tmp/lanchat-server.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -sf http://127.0.0.1:1808/api/ping > /dev/null; then
+              echo "服务器已就绪"
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "服务器启动失败，日志如下："
+          cat /tmp/lanchat-server.log
+          exit 1
+
+      - name: 信令 API 测试
+        run: node utils/tests/signal-api.cjs
+
+      - name: 数字房间号双端 e2e（16 项断言）
+        run: node utils/tests/room-e2e.cjs
+        env:
+          LANCHAT_E2E_HEADLESS: '1'
+
+      - name: WebRTC 连接流程 e2e（19 项断言）
+        run: node utils/tests/webrtc-e2e.cjs
+
+      - name: 剪贴板兼容性 e2e（13 项断言，CI 无系统剪贴板）
+        run: node utils/tests/clipboard-e2e.cjs
+        env:
+          LANCHAT_E2E_HEADLESS: '1'
+          LANCHAT_E2E_NO_SYSTEM_CLIPBOARD: '1'
+
+      - name: 上传服务器日志（失败时）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-log
+          path: /tmp/lanchat-server.log
+          if-no-files-found: ignore

@@ -2,12 +2,85 @@
  * lan-chat 端到端自动化测试 v2（修复标签页绑定问题）
  * 使用 Chrome DevTools Protocol (CDP) 驱动 Edge headless
  */
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const http = require('http');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
-const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+const ROOT = path.join(__dirname, '..', '..');
+
+/** 浏览器探测：环境变量优先，其次常见安装路径（Windows / Linux / macOS） */
+function findBrowser() {
+    if (process.env.LANCHAT_BROWSER) {
+        if (fs.existsSync(process.env.LANCHAT_BROWSER)) return process.env.LANCHAT_BROWSER;
+        throw new Error('LANCHAT_BROWSER 指向的浏览器不存在: ' + process.env.LANCHAT_BROWSER);
+    }
+    const candidates = {
+        win32: [
+            'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+            'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+            path.join(process.env.LOCALAPPDATA || '', 'Google\\Chrome\\Application\\chrome.exe'),
+            'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        ],
+        linux: [
+            '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable',
+            '/usr/bin/chromium', '/usr/bin/chromium-browser',
+            '/usr/bin/microsoft-edge', '/opt/microsoft/msedge/msedge',
+        ],
+        darwin: [
+            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+            '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+        ],
+    }[process.platform] || [];
+    for (const p of candidates) {
+        try { if (p && fs.existsSync(p)) return p; } catch { /* 忽略 */ }
+    }
+    for (const name of ['google-chrome', 'chromium', 'chromium-browser', 'microsoft-edge', 'msedge', 'chrome']) {
+        try {
+            const cmd = process.platform === 'win32' ? `where ${name}` : `which ${name}`;
+            const p = execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n')[0].trim();
+            if (p && fs.existsSync(p)) return p;
+        } catch { /* 继续探测 */ }
+    }
+    throw new Error('未找到可用浏览器（Chrome/Edge），请设置环境变量 LANCHAT_BROWSER 指向浏览器可执行文件');
+}
+
+const EDGE = findBrowser();
 const PORT = 9333;
-const TARGET_URL = 'http://127.0.0.1:1808/index.html';
+const BASE_PORT = 1808;
+const TARGET_URL = `http://127.0.0.1:${BASE_PORT}/index.html`;
+
+let edgeProc = null;
+let serverProc = null;
+
+/** 跨平台进程清理（Windows: taskkill；POSIX: 杀进程组） */
+function killProc(proc) {
+    if (!proc) return;
+    try {
+        if (process.platform === 'win32') execSync(`taskkill /F /T /PID ${proc.pid}`, { stdio: 'ignore' });
+        else process.kill(-proc.pid, 'SIGKILL');
+    } catch { /* 已退出则忽略 */ }
+}
+
+/** 信令服务器探测 / 自动拉起 */
+function pingServer() {
+    return new Promise((resolve) => {
+        const req = http.get(`http://127.0.0.1:${BASE_PORT}/api/ping`, (res) => { res.resume(); resolve(res.statusCode === 200); });
+        req.on('error', () => resolve(false));
+        req.setTimeout(1000, () => { req.destroy(); resolve(false); });
+    });
+}
+async function ensureServer() {
+    if (await pingServer()) return { started: false };
+    const proc = spawn(process.execPath, ['server.js', String(BASE_PORT)], { cwd: ROOT, stdio: 'ignore' });
+    for (let i = 0; i < 40; i++) {
+        await sleep(300);
+        if (await pingServer()) return { started: true, proc };
+    }
+    killProc(proc);
+    throw new Error('信令服务器启动失败');
+}
 
 class CDP {
     constructor(wsUrl) { this.wsUrl = wsUrl; this.id = 0; this.pending = new Map(); this.jsErrors = []; }
@@ -30,10 +103,19 @@ class CDP {
             };
         });
     }
-    send(method, params = {}) {
+    send(method, params = {}, timeoutMs = 20000) {
         return new Promise((resolve, reject) => {
             const id = ++this.id;
-            this.pending.set(id, { resolve, reject });
+            const timer = setTimeout(() => {
+                if (this.pending.has(id)) {
+                    this.pending.delete(id);
+                    reject(new Error(`CDP 命令超时（${timeoutMs}ms）: ${method}`));
+                }
+            }, timeoutMs);
+            this.pending.set(id, {
+                resolve: (v) => { clearTimeout(timer); resolve(v); },
+                reject: (e) => { clearTimeout(timer); reject(e); },
+            });
             this.ws.send(JSON.stringify({ id, method, params }));
         });
     }
@@ -74,11 +156,20 @@ async function main() {
         console.log(`[${pass ? '✅ PASS' : '❌ FAIL'}] ${name}${detail ? ' — ' + detail : ''}`);
     };
 
-    console.log('启动 Edge headless...');
-    const edge = spawn(EDGE, [
+    console.log('准备信令服务器...');
+    const srv = await ensureServer();
+    serverProc = srv.proc || null;
+    console.log(srv.started ? `已自动启动服务器（端口 ${BASE_PORT}）` : `复用已运行的服务器（端口 ${BASE_PORT}）`);
+
+    console.log('启动浏览器 headless...');
+    const profileDir = path.join(os.tmpdir(), 'lanchat-e2e-v2-' + Date.now());
+    const browserArgs = [
         '--headless=new', `--remote-debugging-port=${PORT}`, '--no-first-run', '--no-default-browser-check',
-        '--user-data-dir=' + require('os').tmpdir() + '\\lanchat-e2e-v2', '--disable-gpu'
-    ], { stdio: 'ignore', detached: true });
+        '--user-data-dir=' + profileDir, '--disable-gpu'
+    ];
+    if (process.platform === 'linux') browserArgs.unshift('--no-sandbox', '--disable-dev-shm-usage');
+    const edge = spawn(EDGE, browserArgs, { stdio: 'ignore', detached: true });
+    edgeProc = edge;
 
     let targets = null;
     for (let i = 0; i < 20; i++) { await sleep(500); try { targets = await getTargets(); if (targets?.length) break; } catch (e) {} }
@@ -242,8 +333,14 @@ async function main() {
 
     pageA.close();
     try { pageB.close(); } catch (e) {}
-    try { process.kill(edge.pid); } catch (e) {}
+    killProc(edgeProc);
+    killProc(serverProc);
     process.exit(passed === results.length ? 0 : 1);
 }
 
-main().catch(e => { console.error('致命错误:', e); process.exit(1); });
+main().catch(e => {
+    console.error('致命错误:', e);
+    killProc(edgeProc);
+    killProc(serverProc);
+    process.exit(1);
+});

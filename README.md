@@ -1,5 +1,7 @@
 # 局域网匿名聊天室（lan-chat）
 
+[![CI](https://github.com/zhangjiayang6835-cyber/lan-chat/actions/workflows/ci.yml/badge.svg)](https://github.com/zhangjiayang6835-cyber/lan-chat/actions/workflows/ci.yml)
+
 > 局域网内零注册、零留存的点对点匿名聊天室。**数字房间号一键连接**（推荐），或 **手动 SDP 交换**（完全离线）。消息通过 WebRTC P2P 直连，聊天内容不经过任何服务器。
 
 ## 核心卖点
@@ -116,8 +118,9 @@ node server.js
 
 ## 验证与测试
 
-本项目已完成以下验证：
+本项目已完成以下验证（全部由 CI 自动执行，见 `.github/workflows/ci.yml`）：
 
+- **信令 API 测试**：24 项断言全部通过（房间创建/冲突 409/Offer/Answer 交换/关闭/过期清理/413 请求体超限防护）
 - **数字房间号双端端到端**：16 项断言全部通过（页面就绪 / 创建房间 / 对方加入 / P2P 打通 / 消息双向互通 / 房间释放 / 无 JS 异常）
 - **双端连接测试**：完整 SDP 交换流程，连接建立正常
 - **消息收发测试**：文字消息双向收发正常，断线提示正常
@@ -129,11 +132,16 @@ node server.js
   - 场景3：粘贴按钮降级路径 → 无 JS 异常，正确引导
   - 场景4：完全兜底（两种方式均不可用）→ 自动选中内容并引导手动复制
 
+> 测试框架内置 CDP 命令超时保护与对话框自动处理（`Page.enable` + 20s 超时），任何场景挂起都会显式报错而非卡死。
+
 ### 运行自动化测试
 
 ```bash
 # 前置：启动一体化服务器（端口 1808）
 node server.js
+
+# 信令 API 测试（自行拉起临时服务器，24 项断言）
+node utils/tests/signal-api.cjs
 
 # 数字房间号模式端到端测试（双浏览器，16 项断言）
 node utils/tests/room-e2e.cjs
@@ -144,6 +152,14 @@ node utils/tests/webrtc-e2e.cjs
 # 剪贴板兼容性端到端测试（真实浏览器，4 场景 15 项断言）
 node utils/tests/clipboard-e2e.cjs
 ```
+
+CI / 无桌面环境可用环境变量切换：
+
+| 环境变量 | 作用 |
+|----------|------|
+| `LANCHAT_E2E_HEADLESS=1` | 无头模式运行浏览器（CI 默认） |
+| `LANCHAT_E2E_NO_SYSTEM_CLIPBOARD=1` | 跳过系统剪贴板黄金标准断言（Linux CI 无剪贴板时），其余断言照常执行 |
+| `LANCHAT_BROWSER=/path/to/chrome` | 手动指定浏览器可执行文件 |
 
 ### 自测步骤
 
@@ -161,11 +177,16 @@ lan-chat/
 ├── index.html                  # 前端核心文件（UI + WebRTC + 信令客户端，全部内联）
 ├── server.js                   # 一体化服务器（静态文件 + 数字房间号信令，零依赖）
 ├── test-webrtc.html            # WebRTC 可行性诊断工具（开发辅助）
+├── .github/
+│   └── workflows/
+│       └── ci.yml              # GitHub Actions CI（无头浏览器全量 e2e）
 ├── utils/
 │   └── tests/
+│       ├── signal-api.cjs      # 信令 API 测试（自行拉起临时服务器）
 │       ├── room-e2e.cjs        # 数字房间号模式端到端测试（双浏览器 CDP）
 │       ├── clipboard-e2e.cjs   # 剪贴板兼容性端到端测试（真实浏览器 + 系统剪贴板）
 │       └── webrtc-e2e.cjs      # WebRTC 连接流程端到端测试（CDP 驱动）
+├── LICENSE                     # MIT License
 └── README.md                   # 项目说明文档
 ```
 

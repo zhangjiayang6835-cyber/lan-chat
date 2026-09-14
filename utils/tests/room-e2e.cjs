@@ -13,15 +13,56 @@
 const { spawn, execSync } = require('child_process');
 const http = require('http');
 const os = require('os');
+const fs = require('fs');
+const path = require('path');
 
-const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+const ROOT = path.join(__dirname, '..', '..');
+
+/** 浏览器探测：环境变量优先，其次常见安装路径（Windows / Linux / macOS） */
+function findBrowser() {
+    if (process.env.LANCHAT_BROWSER) {
+        if (fs.existsSync(process.env.LANCHAT_BROWSER)) return process.env.LANCHAT_BROWSER;
+        throw new Error('LANCHAT_BROWSER 指向的浏览器不存在: ' + process.env.LANCHAT_BROWSER);
+    }
+    const candidates = {
+        win32: [
+            'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+            'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+            path.join(process.env.LOCALAPPDATA || '', 'Google\\Chrome\\Application\\chrome.exe'),
+            'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        ],
+        linux: [
+            '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable',
+            '/usr/bin/chromium', '/usr/bin/chromium-browser',
+            '/usr/bin/microsoft-edge', '/opt/microsoft/msedge/msedge',
+        ],
+        darwin: [
+            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+            '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+        ],
+    }[process.platform] || [];
+    for (const p of candidates) {
+        try { if (p && fs.existsSync(p)) return p; } catch { /* 忽略 */ }
+    }
+    for (const name of ['google-chrome', 'chromium', 'chromium-browser', 'microsoft-edge', 'msedge', 'chrome']) {
+        try {
+            const cmd = process.platform === 'win32' ? `where ${name}` : `which ${name}`;
+            const p = execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n')[0].trim();
+            if (p && fs.existsSync(p)) return p;
+        } catch { /* 继续探测 */ }
+    }
+    throw new Error('未找到可用浏览器（Chrome/Edge），请设置环境变量 LANCHAT_BROWSER 指向浏览器可执行文件');
+}
+
+const EDGE = findBrowser();
 const BASE_PORT = 1808;
 const CDP_HOST = 9341;
 const CDP_GUEST = 9342;
 const BASE_URL = `http://127.0.0.1:${BASE_PORT}/index.html`;
 const ROOM = String(1000 + Math.floor(Math.random() * 9000)); // 随机 4 位房间号
+const HEADLESS = process.env.LANCHAT_E2E_HEADLESS === '1';
 
-let hostProc = null, guestProc = null;
+let hostProc = null, guestProc = null, serverProc = null;
 
 class CDP {
     constructor(wsUrl) { this.wsUrl = wsUrl; this.id = 0; this.pending = new Map(); this.events = []; this.dialogs = []; }
@@ -48,10 +89,19 @@ class CDP {
             };
         });
     }
-    send(method, params = {}) {
+    send(method, params = {}, timeoutMs = 20000) {
         return new Promise((resolve, reject) => {
             const id = ++this.id;
-            this.pending.set(id, { resolve, reject });
+            const timer = setTimeout(() => {
+                if (this.pending.has(id)) {
+                    this.pending.delete(id);
+                    reject(new Error(`CDP 命令超时（${timeoutMs}ms）: ${method}`));
+                }
+            }, timeoutMs);
+            this.pending.set(id, {
+                resolve: (v) => { clearTimeout(timer); resolve(v); },
+                reject: (e) => { clearTimeout(timer); reject(e); },
+            });
             this.ws.send(JSON.stringify({ id, method, params }));
         });
     }
@@ -73,33 +123,77 @@ async function getTargets(port) {
     });
 }
 
-async function killExistingOnPort(port) {
-    const occupied = await new Promise((resolve) => {
-        const req = http.get(`http://127.0.0.1:${port}/json/version`, () => resolve(true));
-        req.on('error', () => resolve(false));
-        req.setTimeout(1200, () => { req.destroy(); resolve(false); });
+function httpJson(port, pathname) {
+    return new Promise((resolve, reject) => {
+        http.get(`http://127.0.0.1:${port}${pathname}`, (res) => {
+            let d = '';
+            res.on('data', (c) => d += c);
+            res.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
+        }).on('error', reject);
     });
-    if (!occupied) return;
+}
+
+/** 端口被旧调试实例占用时，通过 CDP Browser.close 优雅关闭（跨平台） */
+async function killExistingOnPort(port) {
+    let version = null;
+    try { version = await httpJson(port, '/json/version'); } catch { return; }
     try {
-        const out = execSync(`wmic process where "name='msedge.exe'" get ProcessId,CommandLine`, { encoding: 'utf8' });
-        const lines = out.split('\n').filter(l => l.includes(`remote-debugging-port=${port}`));
-        const pids = new Set();
-        for (const line of lines) { const m = line.match(/(\d+)\s*$/); if (m) pids.add(m[1]); }
-        for (const pid of pids) { try { execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' }); } catch (e) {} }
-    } catch (e) {}
-    await sleep(1200);
+        if (version && version.webSocketDebuggerUrl) {
+            const br = new CDP(version.webSocketDebuggerUrl);
+            await br.connect();
+            await br.send('Browser.close', {}, 3000).catch(() => {});
+            br.close();
+        }
+    } catch { /* 忽略清理异常 */ }
+    await sleep(1500);
+}
+
+/** 跨平台进程清理（Windows: taskkill；POSIX: 杀进程组） */
+function killProc(proc) {
+    if (!proc) return;
+    try {
+        if (process.platform === 'win32') execSync(`taskkill /F /T /PID ${proc.pid}`, { stdio: 'ignore' });
+        else process.kill(-proc.pid, 'SIGKILL');
+    } catch { /* 已退出则忽略 */ }
+}
+
+/** 信令服务器探测 */
+function pingServer() {
+    return new Promise((resolve) => {
+        const req = http.get(`http://127.0.0.1:${BASE_PORT}/api/ping`, (res) => {
+            res.resume();
+            resolve(res.statusCode === 200);
+        });
+        req.on('error', () => resolve(false));
+        req.setTimeout(1000, () => { req.destroy(); resolve(false); });
+    });
+}
+
+/** 复用已运行服务器；否则自动拉起（CI 环境无需预启动） */
+async function ensureServer() {
+    if (await pingServer()) return { started: false };
+    const proc = spawn(process.execPath, ['server.js', String(BASE_PORT)], { cwd: ROOT, stdio: 'ignore' });
+    for (let i = 0; i < 40; i++) {
+        await sleep(300);
+        if (await pingServer()) return { started: true, proc };
+    }
+    killProc(proc);
+    throw new Error('信令服务器启动失败');
 }
 
 async function launch(port, profileTag, url) {
     await killExistingOnPort(port);
-    const profileDir = os.tmpdir() + `\\lanchat-room-${profileTag}-` + Date.now();
-    const proc = spawn(EDGE, [
+    const profileDir = path.join(os.tmpdir(), `lanchat-room-${profileTag}-${Date.now()}`);
+    const args = [
         `--remote-debugging-port=${port}`,
         '--no-first-run', '--no-default-browser-check',
         `--user-data-dir=${profileDir}`,
         '--window-size=880,760',
         url
-    ], { stdio: 'ignore', detached: true });
+    ];
+    if (HEADLESS) args.unshift('--headless=new', '--disable-gpu');
+    if (process.platform === 'linux') args.unshift('--no-sandbox', '--disable-dev-shm-usage');
+    const proc = spawn(EDGE, args, { stdio: 'ignore', detached: true });
 
     let page = null;
     for (let i = 0; i < 40; i++) {
@@ -184,6 +278,15 @@ async function main() {
     };
 
     console.log(`\n====== 数字房间号模式 · 双端 e2e（房间号 ${ROOM}）======\n`);
+
+    console.log('=== 准备信令服务器 ===');
+    const srv = await ensureServer();
+    if (srv.started) {
+        serverProc = srv.proc;
+        console.log(`已自动启动服务器（端口 ${BASE_PORT}）`);
+    } else {
+        console.log(`复用已运行的服务器（端口 ${BASE_PORT}）`);
+    }
 
     console.log('=== 启动双端浏览器 ===');
     const host = await launch(CDP_HOST, 'host', BASE_URL);
@@ -317,14 +420,12 @@ async function main() {
     results.filter(r => !r.pass).forEach(r => console.log(`  ❌ ${r.name}: ${r.detail || ''}`));
 
     H.close(); G.close();
-    try { execSync(`taskkill /F /T /PID ${hostProc.pid}`, { stdio: 'ignore' }); } catch (e) {}
-    try { execSync(`taskkill /F /T /PID ${guestProc.pid}`, { stdio: 'ignore' }); } catch (e) {}
+    killProc(hostProc); killProc(guestProc); killProc(serverProc);
     process.exit(passed === results.length ? 0 : 1);
 }
 
 main().catch(e => {
     console.error('致命错误:', e);
-    if (hostProc) { try { execSync(`taskkill /F /T /PID ${hostProc.pid}`, { stdio: 'ignore' }); } catch (er) {} }
-    if (guestProc) { try { execSync(`taskkill /F /T /PID ${guestProc.pid}`, { stdio: 'ignore' }); } catch (er) {} }
+    killProc(hostProc); killProc(guestProc); killProc(serverProc);
     process.exit(1);
 });

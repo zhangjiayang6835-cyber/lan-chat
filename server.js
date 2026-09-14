@@ -83,11 +83,14 @@ function readBody(req) {
     return new Promise((resolve, reject) => {
         let data = '';
         let size = 0;
+        let rejected = false;
         req.on('data', (chunk) => {
+            if (rejected) return; // 超限后丢弃剩余数据，保证 413 响应能送达
             size += chunk.length;
             if (size > MAX_BODY) {
+                rejected = true;
+                data = '';
                 reject(Object.assign(new Error('请求体过大'), { status: 413 }));
-                req.destroy();
                 return;
             }
             data += chunk;
