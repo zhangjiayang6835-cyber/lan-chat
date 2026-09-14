@@ -58,6 +58,12 @@ function findBrowser() {
     throw new Error('未找到可用浏览器（Chrome/Edge），请设置环境变量 LANCHAT_BROWSER 指向浏览器可执行文件');
 }
 
+// 全局 WebSocket 自 Node.js 21 起默认可用；Node 20 无此全局对象（CI 使用 Node 22）
+if (typeof WebSocket === 'undefined') {
+    console.error(`致命错误: 当前 Node.js（${process.version}）不提供全局 WebSocket，请改用 Node.js 21+ 运行。`);
+    process.exit(1);
+}
+
 const EDGE = findBrowser();
 const PORT = 9336;
 const TARGET_URL = 'http://localhost:1808/index.html';

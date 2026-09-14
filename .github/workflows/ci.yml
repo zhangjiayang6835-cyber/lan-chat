@@ -17,12 +17,13 @@ jobs:
 
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: 安装 Node.js 20
-        uses: actions/setup-node@v4
+      # Node 22+：e2e 脚本依赖全局 WebSocket（Node 21 起默认启用，Node 20 无此全局对象）
+      - name: 安装 Node.js 22
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: 确认浏览器可用
         run: |
@@ -61,7 +62,7 @@ jobs:
 
       - name: 上传服务器日志（失败时）
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: server-log
           path: /tmp/lanchat-server.log

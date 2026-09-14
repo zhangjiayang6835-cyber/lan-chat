@@ -46,6 +46,12 @@ function findBrowser() {
     throw new Error('未找到可用浏览器（Chrome/Edge），请设置环境变量 LANCHAT_BROWSER 指向浏览器可执行文件');
 }
 
+// 全局 WebSocket 自 Node.js 21 起默认可用；Node 20 无此全局对象（CI 使用 Node 22）
+if (typeof WebSocket === 'undefined') {
+    console.error(`致命错误: 当前 Node.js（${process.version}）不提供全局 WebSocket，请改用 Node.js 21+ 运行。`);
+    process.exit(1);
+}
+
 const EDGE = findBrowser();
 const PORT = 9333;
 const BASE_PORT = 1808;
@@ -273,7 +279,7 @@ async function main() {
             const burnCountA = await pageA.eval('elements.messages.querySelectorAll(".message.burn-message").length');
             log('A 收到阅后即焚消息', burnCountA >= 1, `数量=${burnCountA}`);
 
-            await sleep(6500); // 等待焚毁动画（5s后触发+1s动画）
+            await sleep(8500); // 等待焚毁：5s 倒计时 + 最长 1.5s 兜底移除（留 ~2s 余量，避免边界抖动）
             const burnAfterA = await pageA.eval('elements.messages.querySelectorAll(".message.burn-message").length');
             log('阅后即焚消息自动消失', burnAfterA === 0, `剩余=${burnAfterA}`);
 
