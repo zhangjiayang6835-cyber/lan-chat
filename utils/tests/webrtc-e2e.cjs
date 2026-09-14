@@ -310,9 +310,13 @@ async function main() {
             log('B 收到文件', String(fileRecvB).includes('has-download-btn') || String(fileRecvMsgB).includes('接收完成'), `按钮=${fileRecvB}, 消息=${fileRecvMsgB}`);
 
             // ========== 测试 8: 断线检测 ==========
-            // 关闭 B 标签页
+            // 模拟对方用户正常离开（等价点击产品内"返回"按钮）：执行 resetConnectView()
+            // 走产品真实清理路径 pc.close()，会发送 DTLS close_notify，对端可立即感知。
+            // 注意：不能直接用 Page.close 强杀渲染进程——CI 无头 Chrome 下进程被直接终止
+            // 不发送 close_notify，对端只能等待 ICE 超时（30s+），断言窗口内必然失败。
+            await pageB.eval('resetConnectView()');
             await pageB.send('Page.close').catch(() => {});
-            await sleep(6000);
+            await sleep(10000); // 等待对端事件传播 + UI 更新（本地网络事件为毫秒级，10s 为充裕余量）
 
             const disconnectShown = await pageA.eval(`
                 Array.from(elements.messages.querySelectorAll(".system-message"))

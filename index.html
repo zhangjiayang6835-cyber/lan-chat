@@ -1830,6 +1830,9 @@
             channel.onclose = () => {
                 console.log('DataChannel closed');
                 addMessage('📡 数据通道已关闭', 'system');
+                // 与 connectionState 断线路径保持一致：禁用输入并显示返回按钮，
+                // 避免仅触发 onclose 的浏览器上用户仍可输入却发不出消息
+                updateConnectionStatus('disconnected');
             };
 
             channel.onerror = (event) => {
@@ -1871,6 +1874,8 @@
                 event.channel.onclose = () => {
                     console.log('DataChannel (incoming) closed');
                     addMessage('📡 数据通道已关闭', 'system');
+                    // 与 connectionState 断线路径保持一致：禁用输入并显示返回按钮
+                    updateConnectionStatus('disconnected');
                 };
 
                 event.channel.onerror = (event) => {
@@ -2214,6 +2219,34 @@
         }
 
         /**
+         * 静默关闭数据通道与 PeerConnection
+         * 主动离开/重置场景：先摘除事件回调再 close()，避免关闭动作触发的
+         * 断线事件把已重置的界面覆盖为"已断开"；close() 仍会向对端发送
+         * DTLS close_notify，对端可正常感知我方离开
+         */
+        function closeConnectionsSilently() {
+            if (state.dataChannel) {
+                try {
+                    state.dataChannel.onopen = null;
+                    state.dataChannel.onclose = null;
+                    state.dataChannel.onerror = null;
+                    state.dataChannel.onmessage = null;
+                } catch (e) { /* 忽略 */ }
+                try { state.dataChannel.close(); } catch (e) { /* 忽略 */ }
+                state.dataChannel = null;
+            }
+            if (state.peerConnection) {
+                try {
+                    state.peerConnection.onconnectionstatechange = null;
+                    state.peerConnection.oniceconnectionstatechange = null;
+                    state.peerConnection.ondatachannel = null;
+                } catch (e) { /* 忽略 */ }
+                try { state.peerConnection.close(); } catch (e) { /* 忽略 */ }
+                state.peerConnection = null;
+            }
+        }
+
+        /**
          * 清理房间会话资源
          * @param {boolean} closeRoom - 是否通知服务器关闭房间（仅创建方有效）
          */
@@ -2225,14 +2258,7 @@
                 apiPost('/api/close', { room: state.roomCode }).catch(() => {});
             }
 
-            if (state.dataChannel) {
-                try { state.dataChannel.close(); } catch (e) { /* 忽略 */ }
-                state.dataChannel = null;
-            }
-            if (state.peerConnection) {
-                try { state.peerConnection.close(); } catch (e) { /* 忽略 */ }
-                state.peerConnection = null;
-            }
+            closeConnectionsSilently();
         }
 
         /**
@@ -2454,15 +2480,8 @@
             state.roomCode = null;
             state.roomRole = null;
 
-            // 清理旧连接
-            if (state.dataChannel) {
-                state.dataChannel.close();
-                state.dataChannel = null;
-            }
-            if (state.peerConnection) {
-                state.peerConnection.close();
-                state.peerConnection = null;
-            }
+            // 清理旧连接（静默关闭：不触发本页断线回调，同时通知对端）
+            closeConnectionsSilently();
 
             // 清理文件传输记录
             state.fileTransfers = {};
